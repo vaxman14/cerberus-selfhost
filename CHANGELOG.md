@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 - 2026-09-28
+
+- Added the new Cerberus Scan logo across the application, website, registry
+  documentation, repository, and Unraid template.
+- Corrected the first-owner form so username, password, and confirmation fields
+  align evenly on desktop and stack consistently on smaller screens.
+- Made the AIO install reachable from the LAN by default, printed the browser
+  destination, and documented every install flag, mount, and safety boundary.
+
 ## 0.2.0 - 2026-09-28
 
 - Added local owner authentication and sessions.

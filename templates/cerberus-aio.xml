@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Container version="2">
   <Name>Cerberus-AIO</Name>
-  <Repository>romanvaxman/cerberus-aio:0.2.0</Repository>
+  <Repository>romanvaxman/cerberus-aio:0.2.1</Repository>
   <Registry>https://hub.docker.com/r/romanvaxman/cerberus-aio</Registry>
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Icon>https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/launch/product-hunt/assets/thumbnail-240.png</Icon>
+  <Icon>https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/console/cerberus-emblem.png</Icon>
   <WebUI>http://[IP]:[PORT:8099]</WebUI>
   <Overview>Cerberus is a self-hosted website security and quality scanner with local Lighthouse, Nuclei, OWASP ZAP, sqlmap, local users, history, PDF-ready reports, and optional AI analysis. This AIO master launches the isolated child stack. It requires the Docker socket, which grants control of the Docker host; install only the official image and review release notes before updating.</Overview>
   <Project>https://github.com/vaxman14/cerberus-selfhost</Project>
@@ -16,7 +16,7 @@
   <Category>Tools:System Security:</Category>
   <ExtraSearchTerms>website scanner lighthouse nuclei zap sqlmap security pentest</ExtraSearchTerms>
   <Requires>Docker socket access; approximately 8 GB free disk and 8 GB RAM recommended. Active scans are disabled by default.</Requires>
-  <Changes>0.2.0: Initial AIO release.</Changes>
+  <Changes>0.2.1: New Cerberus Scan branding, clearer AIO onboarding, and corrected first-owner form layout.</Changes>
   <Date>2026-09-28</Date>
   <MinVer>7.0</MinVer>
   <License>AGPL-3.0-only</License>

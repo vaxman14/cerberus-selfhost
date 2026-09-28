@@ -20,6 +20,16 @@ AUTH_MODE = os.environ.get(
     "CERBERUS_AUTH_MODE", "supabase" if SUPA_ANON else "apikey").lower()
 ADMIN_EMAIL = os.environ.get("CERBERUS_ADMIN_EMAIL", "").lower()
 CONSOLE_PATH = Path(__file__).resolve().parent.parent / "console" / "index.html"
+CONSOLE_ASSETS = {
+    "/cerberus-logo.jpg": (
+        Path(__file__).resolve().parent.parent / "console" / "cerberus-logo.jpg",
+        "image/jpeg",
+    ),
+    "/cerberus-emblem.png": (
+        Path(__file__).resolve().parent.parent / "console" / "cerberus-emblem.png",
+        "image/png",
+    ),
+}
 JOBS: dict[str, dict] = {}
 CANCEL_EVENTS: dict[str, threading.Event] = {}
 LOCK = threading.Lock()
@@ -173,6 +183,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_console_asset(self, path: str) -> None:
+        asset = CONSOLE_ASSETS.get(path)
+        if not asset:
+            return self._send(404, {"error": "asset unavailable"})
+        file_path, content_type = asset
+        try:
+            body = file_path.read_bytes()
+        except OSError:
+            return self._send(404, {"error": "asset unavailable"})
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _send_llm_error(self, exc: llm.LLMError) -> None:
         self._send(exc.status, {"error": str(exc), "category": exc.category})
 
@@ -197,6 +224,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
             return self._send_console()
+        if path in CONSOLE_ASSETS:
+            return self._send_console_asset(path)
         if path == "/health":
             return self._send(200, {
                 "ok": True,

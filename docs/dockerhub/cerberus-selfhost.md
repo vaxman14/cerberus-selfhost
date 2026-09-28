@@ -1,3 +1,5 @@
+![Cerberus Scan](https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/console/cerberus-logo.jpg)
+
 # Cerberus
 
 Cerberus is a free, self-hosted website security and quality scanner with local
@@ -65,10 +67,10 @@ decrypted without it.
 
 ## Images
 
-- `romanvaxman/cerberus-selfhost:0.2.0`
-- `romanvaxman/cerberus-tools:0.2.0`
-- `romanvaxman/cerberus-zap:0.2.0`
-- `romanvaxman/cerberus-aio:0.2.0` — optional Docker-socket launcher
+- `romanvaxman/cerberus-selfhost:0.2.1`
+- `romanvaxman/cerberus-tools:0.2.1`
+- `romanvaxman/cerberus-zap:0.2.1`
+- `romanvaxman/cerberus-aio:0.2.1` — optional Docker-socket launcher
 
 Images support `linux/amd64` and `linux/arm64`.
 
@@ -77,7 +79,7 @@ Images support `linux/amd64` and `linux/arm64`.
 - [Step-by-step installation guide](https://cerberusscan.com/install)
 - [Help and operations](https://cerberusscan.com/help)
 - [Source and complete documentation](https://github.com/vaxman14/cerberus-selfhost)
-- [Release v0.2.0](https://github.com/vaxman14/cerberus-selfhost/releases/tag/v0.2.0)
+- [Release v0.2.1](https://github.com/vaxman14/cerberus-selfhost/releases/tag/v0.2.1)
 - [Help and operations](https://github.com/vaxman14/cerberus-selfhost/blob/main/docs/HELP.md)
 - [Security policy](https://github.com/vaxman14/cerberus-selfhost/blob/main/SECURITY.md)
 - [Terms and authorization requirements](https://github.com/vaxman14/cerberus-selfhost/blob/main/TERMS.md)

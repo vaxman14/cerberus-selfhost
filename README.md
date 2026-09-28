@@ -1,3 +1,5 @@
+<p align="center"><img src="console/cerberus-logo.jpg" width="420" alt="Cerberus Scan"></p>
+
 # Cerberus
 
 Cerberus is a free, self-hosted website security and quality scanner. Local
@@ -70,7 +72,7 @@ configuration, and troubleshooting instructions.
 
 ## Unraid AIO
 
-The optional `romanvaxman/cerberus-aio:0.2.0` master image provides a
+The optional `romanvaxman/cerberus-aio:0.2.1` master image provides a
 single-container Community Apps entry while launching the isolated child
 stack. It requires `/var/run/docker.sock`, which grants effective control of
 the Docker host. The ordinary Compose install does not mount the socket and is
@@ -111,9 +113,9 @@ plain-HTTP port to the internet.
 | `CERBERUS_DATA_VOLUME` | `cerberus-data` | Active database generation |
 | `CERBERUS_CODEX_VOLUME` | `cerberus-codex` | Dedicated Codex sign-in state |
 
-Release images are `romanvaxman/cerberus-selfhost:0.2.0`,
-`romanvaxman/cerberus-tools:0.2.0`, `romanvaxman/cerberus-zap:0.2.0`, and the
-optional `romanvaxman/cerberus-aio:0.2.0` launcher. Public installs pull images;
+Release images are `romanvaxman/cerberus-selfhost:0.2.1`,
+`romanvaxman/cerberus-tools:0.2.1`, `romanvaxman/cerberus-zap:0.2.1`, and the
+optional `romanvaxman/cerberus-aio:0.2.1` launcher. Public installs pull images;
 development builds use `compose.dev.yaml`.
 
 ## API

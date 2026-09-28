@@ -31,6 +31,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Resolve release metadata
         id: meta
         shell: bash
@@ -47,6 +52,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ steps.meta.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
+            docker.io/romanvaxman/${{ matrix.name }}:${{ steps.meta.outputs.version }}
+            docker.io/romanvaxman/${{ matrix.name }}:latest
           build-args: |
             CERBERUS_VERSION=${{ steps.meta.outputs.version }}
             CERBERUS_REVISION=${{ github.sha }}

@@ -205,6 +205,22 @@ class ReportSupportLinkTests(unittest.TestCase):
         self.assertIn("window.print()", report)
 
 
+class ConsoleBrandAndLayoutTests(unittest.TestCase):
+    def test_setup_layout_and_brand_assets_are_packaged(self):
+        console = api.CONSOLE_PATH.read_text(encoding="utf-8")
+        self.assertIn('id="authFields"', console)
+        self.assertIn(".auth-setup{grid-template-columns:repeat(3", console)
+        self.assertIn(
+            "@media(max-width:800px){.auth-setup{grid-template-columns:1fr}",
+            console,
+        )
+        self.assertIn('src="/cerberus-logo.jpg"', console)
+        for path, (asset, content_type) in api.CONSOLE_ASSETS.items():
+            self.assertTrue(asset.is_file(), path)
+            self.assertGreater(asset.stat().st_size, 0, path)
+            self.assertIn(content_type, {"image/jpeg", "image/png"})
+
+
 class LocalAuthTests(unittest.TestCase):
     def test_first_owner_login_session_and_csrf(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
