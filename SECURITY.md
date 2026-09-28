@@ -21,3 +21,11 @@ does not grant privileged mode. It drops every capability except `NET_RAW`,
 enables `no-new-privileges`, applies CPU/memory ceilings, and binds the
 dashboard to localhost by default. Do not weaken these controls or expose the
 dashboard directly to the public internet.
+
+Model credentials are encrypted at rest with AES-256-GCM. The installation
+master key is a Docker secret file outside the database and image; environment
+variables are refused. API responses return only whether a key exists. The AI
+engine receives a random, expiring, profile-scoped bridge token stored only as
+a hash by Cerberus and never receives the provider credential. Custom endpoints permit loopback and private networks for
+self-hosted inference but refuse link-local/cloud-metadata, unspecified,
+multicast, reserved, credential-bearing, and redirecting URLs.

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
+import secrets
 import sqlite3
 import urllib.request
 import uuid
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .models import ScanResult
@@ -25,6 +27,7 @@ def _db() -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(
         """
@@ -50,6 +53,28 @@ def _db() -> sqlite3.Connection:
         );
         CREATE INDEX IF NOT EXISTS idx_scans_created ON scans(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
+        CREATE TABLE IF NOT EXISTS llm_profiles (
+          id TEXT PRIMARY KEY,
+          label TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          model TEXT NOT NULL,
+          base_url TEXT,
+          api_key_enc TEXT,
+          external_acknowledged INTEGER NOT NULL DEFAULT 0,
+          activated_at TEXT,
+          probed_at TEXT,
+          capabilities_json TEXT NOT NULL DEFAULT '{}',
+          probe_steps_json TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS llm_bridge_tokens (
+          token_hash TEXT PRIMARY KEY,
+          profile_id TEXT NOT NULL REFERENCES llm_profiles(id) ON DELETE CASCADE,
+          expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_llm_bridge_expiry ON llm_bridge_tokens(expires_at);
         """
     )
     return conn
@@ -228,3 +253,141 @@ def agreement_exists(auth_id: str) -> bool:
         return False
     rows = _get(f"cerberus_authorizations?id=eq.{auth_id}&select=id")
     return bool(rows)
+
+
+def list_llm_profiles() -> list[dict]:
+    """Return redacted local profiles. Ciphertext never crosses the API."""
+    with closing(_db()) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, label, provider, model, base_url,
+                   api_key_enc IS NOT NULL AS has_api_key,
+                   external_acknowledged, activated_at, probed_at,
+                   capabilities_json, probe_steps_json, created_at, updated_at
+            FROM llm_profiles ORDER BY created_at ASC
+            """
+        ).fetchall()
+    values = []
+    for row in rows:
+        item = dict(row)
+        item["has_api_key"] = bool(item["has_api_key"])
+        item["external_acknowledged"] = bool(item["external_acknowledged"])
+        item["capabilities"] = json.loads(item.pop("capabilities_json") or "{}")
+        item["probe_steps"] = json.loads(item.pop("probe_steps_json") or "[]")
+        values.append(item)
+    return values
+
+
+def get_llm_profile(profile_id: str, *, include_ciphertext: bool = False) -> dict | None:
+    columns = "*" if include_ciphertext else (
+        "id, label, provider, model, base_url, "
+        "api_key_enc IS NOT NULL AS has_api_key, external_acknowledged, "
+        "activated_at, probed_at, capabilities_json, probe_steps_json, created_at, updated_at"
+    )
+    with closing(_db()) as conn:
+        row = conn.execute(
+            f"SELECT {columns} FROM llm_profiles WHERE id = ?", (profile_id,)
+        ).fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    if "has_api_key" in item:
+        item["has_api_key"] = bool(item["has_api_key"])
+    item["external_acknowledged"] = bool(item["external_acknowledged"])
+    item["capabilities"] = json.loads(item.pop("capabilities_json") or "{}")
+    item["probe_steps"] = json.loads(item.pop("probe_steps_json") or "[]")
+    return item
+
+
+def save_llm_profile(
+    *, profile_id: str | None, label: str, provider: str, model: str,
+    base_url: str | None, api_key_enc: str | None,
+    external_acknowledged: bool,
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    profile_id = profile_id or uuid.uuid4().hex[:16]
+    with closing(_db()) as conn:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO llm_profiles
+                  (id, label, provider, model, base_url, api_key_enc,
+                   external_acknowledged, activated_at, probed_at,
+                   capabilities_json, probe_steps_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, '{}', '[]', ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  label=excluded.label, provider=excluded.provider,
+                  model=excluded.model, base_url=excluded.base_url,
+                  api_key_enc=excluded.api_key_enc,
+                  external_acknowledged=excluded.external_acknowledged,
+                  activated_at=NULL, probed_at=NULL,
+                  capabilities_json='{}', probe_steps_json='[]',
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    profile_id, label, provider, model, base_url, api_key_enc,
+                    int(external_acknowledged), now, now,
+                ),
+            )
+    return get_llm_profile(profile_id) or {}
+
+
+def save_llm_probe(profile_id: str, capabilities: dict, steps: list, *, active: bool) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(_db()) as conn:
+        with conn:
+            conn.execute(
+                """
+                UPDATE llm_profiles
+                SET activated_at=?, probed_at=?, capabilities_json=?,
+                    probe_steps_json=?, updated_at=?
+                WHERE id=?
+                """,
+                (
+                    now if active else None, now,
+                    json.dumps(capabilities, separators=(",", ":")),
+                    json.dumps(steps, separators=(",", ":")), now, profile_id,
+                ),
+            )
+    return get_llm_profile(profile_id) or {}
+
+
+def delete_llm_profile(profile_id: str) -> bool:
+    with closing(_db()) as conn:
+        with conn:
+            cursor = conn.execute("DELETE FROM llm_profiles WHERE id = ?", (profile_id,))
+    return cursor.rowcount > 0
+
+
+def issue_llm_bridge_token(profile_id: str, *, ttl_hours: int = 168) -> str:
+    token = secrets.token_urlsafe(32)
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(hours=max(1, min(ttl_hours, 168)))
+    with closing(_db()) as conn:
+        with conn:
+            conn.execute("DELETE FROM llm_bridge_tokens WHERE expires_at <= ?", (now.isoformat(),))
+            conn.execute(
+                "INSERT INTO llm_bridge_tokens(token_hash, profile_id, expires_at, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (digest, profile_id, expires.isoformat(), now.isoformat()),
+            )
+    return token
+
+
+def profile_for_llm_bridge_token(token: str) -> str | None:
+    if not token:
+        return None
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(_db()) as conn:
+        row = conn.execute(
+            """
+            SELECT t.profile_id
+            FROM llm_bridge_tokens t
+            JOIN llm_profiles p ON p.id=t.profile_id
+            WHERE t.token_hash=? AND t.expires_at>? AND p.activated_at IS NOT NULL
+            """,
+            (digest, now),
+        ).fetchone()
+    return str(row[0]) if row else None

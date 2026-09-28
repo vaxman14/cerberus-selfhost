@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
-from . import ai_lab, runner, reporting, persistence
+from . import ai_lab, llm, runner, reporting, persistence, vault
 from .models import ScanResult, Finding, Head, Severity
 
 API_KEY = os.environ.get("CERBERUS_API_KEY", "")
@@ -100,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self._cors()
         self.send_header("Access-Control-Allow-Headers", "X-API-Key,Content-Type,Authorization")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -124,6 +124,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_llm_error(self, exc: llm.LLMError) -> None:
+        self._send(exc.status, {"error": str(exc), "category": exc.category})
+
+    def _relay_provider_response(self, response) -> None:
+        try:
+            self.send_response(response.status_code)
+            self.send_header("Content-Type", response.headers.get("Content-Type", "application/json"))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            for chunk in response.iter_content(chunk_size=16384):
+                if chunk:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        finally:
+            response.close()
+
     def do_OPTIONS(self):  # noqa: N802
         self._send(204, {})
 
@@ -133,6 +150,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_console()
         if path == "/health":
             return self._send(200, {"ok": True})
+        if path == "/internal/llm/v1/models":
+            profile_id = llm.authenticate_bridge(self.headers.get("Authorization", ""))
+            if not profile_id:
+                return self._send(401, {"error": "unauthorized"})
+            return self._send(200, llm.bridge_models(profile_id))
         if not self._authed():
             return self._send(401, {"error": "unauthorized"})
         user = self._user()
@@ -156,6 +178,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"scans": scans})
         if path == "/ai-lab/status":
             return self._send(200, ai_lab.status())
+        if path == "/ai-lab/providers":
+            return self._send(200, {
+                "catalog_version": llm.CATALOG_VERSION,
+                "providers": llm.provider_catalog(),
+                "profiles": persistence.list_llm_profiles(),
+                "vault_ready": vault.master_key_available(),
+            })
         if path.startswith("/report/"):
             sid = path.split("/report/", 1)[1]
             scan = persistence.get_scan(sid)
@@ -183,17 +212,49 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
     def do_POST(self):  # noqa: N802
+        path = urlparse(self.path).path
+        ln = int(self.headers.get("Content-Length", "0") or 0)
+        if ln > 1_000_000:
+            return self._send(413, {"error": "request too large"})
+        if path == "/internal/llm/v1/chat/completions":
+            profile_id = llm.authenticate_bridge(self.headers.get("Authorization", ""))
+            if not profile_id:
+                return self._send(401, {"error": "unauthorized"})
+            try:
+                params = json.loads(self.rfile.read(ln) or b"{}")
+            except ValueError:
+                return self._send(400, {"error": "bad json"})
+            try:
+                return self._relay_provider_response(llm.bridge_chat(profile_id, params))
+            except llm.LLMError as exc:
+                return self._send_llm_error(exc)
+
         if not self._authed():
             return self._send(401, {"error": "unauthorized"})
         user = self._user()
         if not user:
             return self._send(401, {"error": "sign in required"})
-        path = urlparse(self.path).path
-        ln = int(self.headers.get("Content-Length", "0") or 0)
         try:
             params = json.loads(self.rfile.read(ln) or b"{}")
         except ValueError:
             return self._send(400, {"error": "bad json"})
+        try:
+            if path == "/ai-lab/providers":
+                return self._send(200, {"profile": llm.save_profile(params)})
+            if path == "/ai-lab/providers/discover":
+                return self._send(200, llm.discover_connection(params))
+            if path.startswith("/ai-lab/providers/"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4 and parts[3] == "discover":
+                    return self._send(200, llm.discover_models(parts[2]))
+                if len(parts) == 4 and parts[3] == "probe":
+                    return self._send(200, llm.probe_profile(parts[2]))
+            if path == "/ai-lab/scans":
+                return self._send(202, ai_lab.start_scan(params))
+        except llm.LLMError as exc:
+            return self._send_llm_error(exc)
+        except vault.VaultError as exc:
+            return self._send(503, {"error": str(exc), "category": "vault"})
 
         if path == "/scan":
             if not params.get("url"):
@@ -223,6 +284,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(202, {"job_id": jid, "status": "running"})
 
         self._send(404, {"error": "not found"})
+
+    def do_DELETE(self):  # noqa: N802
+        if not self._authed():
+            return self._send(401, {"error": "unauthorized"})
+        user = self._user()
+        if not user:
+            return self._send(401, {"error": "sign in required"})
+        path = urlparse(self.path).path
+        if path.startswith("/ai-lab/providers/"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 3:
+                removed = persistence.delete_llm_profile(parts[2])
+                return self._send(200 if removed else 404, {"removed": removed})
+        return self._send(404, {"error": "not found"})
 
     def log_message(self, *a):  # silence access logs
         pass

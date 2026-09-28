@@ -11,6 +11,12 @@ services:
       CERBERUS_AI_PORT: ${CERBERUS_AI_PORT:-9137}
       CERBERUS_AI_USERNAME: ${CERBERUS_AI_USERNAME:-admin}
       CERBERUS_AI_PASSWORD: ${CERBERUS_AI_PASSWORD:?Set CERBERUS_AI_PASSWORD in .env}
+      CERBERUS_MASTER_KEY_FILE: /run/cerberus-vault/master_key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - cerberus-data:/data
+      - cerberus-master-key:/run/cerberus-vault:ro
     depends_on:
       cerberus-ai:
         condition: service_healthy
@@ -61,3 +67,7 @@ services:
 
 volumes:
   cerberus-ai-data:
+
+  cerberus-master-key:
+    external: true
+    name: ${CERBERUS_MASTER_KEY_VOLUME:-cerberus-master-key}

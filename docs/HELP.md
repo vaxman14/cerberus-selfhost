@@ -3,20 +3,29 @@
 ## AI Lab
 
 AI Lab is an optional companion service for source-assisted testing of your own
-application. Set a separate `CERBERUS_AI_PASSWORD` in `.env`, then start it:
+application. Set a separate `CERBERUS_AI_PASSWORD` in `.env`, then create the
+installation master-key file and start it:
 
 ```bash
+mkdir -p secrets
+openssl rand -base64 32 > secrets/cerberus_master_key
+chmod 600 secrets/cerberus_master_key
+./scripts/init-vault.sh
 docker compose -f compose.yaml -f compose.ai-lab.yaml up -d
 ```
 
-Its dashboard listens on `127.0.0.1:9137` by default. Configure your own LLM
-in Settings, supply a Git repository or source archive, and choose source-only
-**Review** or **Provision + DAST**. Provision mode builds and runs untrusted
-project code inside the isolated AI Lab service; use sanitized source and data.
+Back up `secrets/cerberus_master_key` separately. The key is never stored in the
+database or image; losing it makes the encrypted provider credentials
+unrecoverable. The external key volume is not removed by
+`docker compose down --volumes`. Configure the model in the Cerberus console, discover its real
+model list, save it, and run the four capability probes. Supply a Git repository
+and choose source-only **Review** or **Provision + DAST**. Provision mode builds
+and runs untrusted project code inside the isolated AI Lab service; use
+sanitized source and data.
 
-To remove retained Lab settings, model credentials, scans, and reports, stop
-the stack, inspect the exact name with `docker volume ls`, then remove its
-`cerberus-ai-data` volume intentionally.
+Provider profiles live encrypted in `cerberus-data`; scans and reports live in
+`cerberus-ai-data`. To remove retained data, stop the stack, inspect the exact
+names with `docker volume ls`, then remove the intended volumes explicitly.
 
 ## Install
 

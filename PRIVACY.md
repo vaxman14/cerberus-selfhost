@@ -16,10 +16,12 @@ Operators control local retention and are responsible for protecting the API
 key, Docker host, backups, reverse proxy, and network access. CTF Designs does
 not sell personal information or local scan data.
 
-The optional AI Lab stores its settings, model credential, source uploads,
-scan events, and reports in a separate local Docker volume. When an operator
-configures a remote LLM, prompts and relevant scan context are sent to that
-provider and its privacy policy applies. A local model can avoid that external
-transmission. CTF Designs does not receive or operate those provider accounts.
+The optional AI Lab stores provider profiles in the Cerberus data volume and
+stores source uploads, scan events, and reports in a separate AI Lab volume.
+Provider credentials are encrypted with an installation key kept outside the
+database. When an operator configures a remote LLM, prompts and relevant scan
+context are sent to that provider and its privacy policy applies. A local model
+can avoid that external transmission. CTF Designs does not receive or operate
+those provider accounts.
 
 The complete current policy is at <https://cerberusscan.com/privacy.html>.

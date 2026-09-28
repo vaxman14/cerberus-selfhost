@@ -28,17 +28,33 @@ Generate a separate AI Lab password and put it after
 openssl rand -hex 24
 ```
 
+Generate the installation master key as a file, not an environment variable:
+
+```bash
+mkdir -p secrets
+openssl rand -base64 32 > secrets/cerberus_master_key
+chmod 600 secrets/cerberus_master_key
+./scripts/init-vault.sh
+```
+
+Back that file up separately from the database. A database backup without the
+original key deliberately cannot decrypt saved provider credentials. The script
+copies it through stdin into the external `cerberus-master-key` Docker volume;
+the application container remains non-root and the host copy remains mode 600.
+
 Then start both services:
 
 ```bash
 docker compose -f compose.yaml -f compose.ai-lab.yaml up -d
 ```
 
-Open Cerberus and choose **Open AI Lab**, or browse directly to
-<http://127.0.0.1:9137>. Configure your own model/provider under
-**Settings → LLM**, attach a Git URL or source `.zip`, and choose
-**Provision + DAST** to build and test a disposable copy. **Review** performs
-source-only analysis.
+Open Cerberus, configure a provider in the **AI Lab** card, discover the models
+that credential may actually use, save it encrypted, and run the capability
+probe. Only profiles proven to support chat, structured output, tool calls, and
+useful context can start a scan. Attach a Git URL and choose **Provision +
+DAST** to build and test a disposable copy. **Review** performs source-only
+analysis. The separate Xalgorix dashboard remains available through **Open AI
+Lab** for scan progress and reports.
 
 The shipped overlay grants no host-Docker access or privileged mode. It drops
 Linux capabilities except `NET_RAW`, enables `no-new-privileges`, sets resource
@@ -46,9 +62,12 @@ ceilings and conservative rate limits, and publishes only to localhost by
 default. Low-level tools requiring broader kernel privileges may be unavailable;
 web-application testing is the intended use.
 
-Your LLM key and Lab artifacts stay in the separate `cerberus-ai-data` Docker
-volume. Requests to a remote model provider leave your machine and are governed
-by that provider's terms and privacy policy.
+Provider keys are AES-256-GCM sealed in Cerberus's database with the
+installation master key mounted from `/run/secrets`; API responses expose only
+`has_api_key`. Xalgorix receives a random, expiring, profile-scoped internal
+bridge token whose hash is stored locally, never the real provider key.
+Requests to a remote model provider leave your machine and are
+governed by that provider's terms and privacy policy.
 
 Website, installation guide, and policies: <https://cerberusscan.com>
 

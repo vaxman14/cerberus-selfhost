@@ -21,3 +21,4 @@ build/
 *-tokens.json
 canva-tokens.json
 credentials/
+secrets/
