@@ -66,8 +66,14 @@ docker run -d \
   romanvaxman/cerberus-aio:0.2.0
 ```
 
-Follow startup progress with `docker logs -f cerberus-aio`, then open the local
-URL and create the first owner.
+The `-p 127.0.0.1:8099:8099` option intentionally makes Cerberus reachable
+only from the Docker host. Follow startup progress with
+`docker logs -f cerberus-aio`. When the log reports
+`proxy listening on container port 8099`, press `Ctrl+C`; this stops following
+the logs but leaves Cerberus running. Then open **<http://127.0.0.1:8099>** in
+a browser on the Docker host and create the first owner. If Docker is on
+another machine, use the SSH tunnel described above and open that same URL in
+the browser on your computer.
 
 ## Data, updates, and removal
 
