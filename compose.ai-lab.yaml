@@ -1,0 +1,63 @@
+# Optional AI Lab. Start with:
+# docker compose -f compose.yaml -f compose.ai-lab.yaml up -d
+#
+# Xalgorix supplies the maintained BYO-LLM pentest engine. Cerberus keeps it
+# separately authenticated and does not grant host-Docker or privileged access.
+services:
+  cerberus:
+    environment:
+      CERBERUS_AI_LAB_ENABLED: "true"
+      CERBERUS_AI_URL: http://cerberus-ai:9137
+      CERBERUS_AI_PORT: ${CERBERUS_AI_PORT:-9137}
+      CERBERUS_AI_USERNAME: ${CERBERUS_AI_USERNAME:-admin}
+      CERBERUS_AI_PASSWORD: ${CERBERUS_AI_PASSWORD:?Set CERBERUS_AI_PASSWORD in .env}
+    depends_on:
+      cerberus-ai:
+        condition: service_healthy
+
+  cerberus-ai:
+    image: xalgord/xalgorix:4.6.113@sha256:d6d14778bf815b6db380f76a8c27c383deafde9d536425dc3bdc32a9f20ab1ab
+    entrypoint: ["xalgorix"]
+    command: ["--web"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HOME: /data
+      XALGORIX_BIND: 0.0.0.0
+      XALGORIX_PORT: 9137
+      XALGORIX_USERNAME: ${CERBERUS_AI_USERNAME:-admin}
+      XALGORIX_PASSWORD: ${CERBERUS_AI_PASSWORD:?Set CERBERUS_AI_PASSWORD in .env}
+      XALGORIX_ALLOW_LOCAL_TARGETS: "false"
+      XALGORIX_ALLOW_AUTO_INSTALL: "false"
+      XALGORIX_NO_AUTO_UPDATE: "1"
+      XALGORIX_RATE_RPS: ${CERBERUS_AI_RATE_RPS:-5}
+      XALGORIX_RATE_BURST: ${CERBERUS_AI_RATE_BURST:-10}
+    ports:
+      - "${CERBERUS_BIND:-127.0.0.1}:${CERBERUS_AI_PORT:-9137}:9137"
+    volumes:
+      - cerberus-ai-data:/data
+    tmpfs:
+      - /tmp:rw,nosuid,size=2g
+      - /workspace:rw,nosuid,size=4g
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+          cpus: "4.0"
+          pids: 512
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9137/api/auth/status"]
+      interval: 15s
+      timeout: 5s
+      start_period: 45s
+      retries: 8
+
+volumes:
+  cerberus-ai-data:

@@ -19,9 +19,10 @@ button{border:0;border-radius:10px;background:var(--red);color:#fff;padding:12px
 .summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.pill{border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted);font-size:12px}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;vertical-align:top;padding:10px 8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.critical,.high{color:#ff6653}.medium{color:#f3c344}.low{color:#7edb92}.info{color:#94a0b5}
 .history-item{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}.history-item small{color:var(--muted)}
+.lab-grid{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center}.lab-actions{display:flex;gap:10px;flex-wrap:wrap}.lab-actions a{display:inline-block;border-radius:10px;background:var(--red);color:#fff;padding:12px 18px;text-decoration:none;font-weight:800}.lab-actions a.disabled{background:#20242d;color:var(--muted);pointer-events:none}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#666;margin-right:7px}.dot.on{background:var(--green)}
 .hidden{display:none}.notice{border-left:3px solid var(--yellow);padding-left:12px;color:var(--muted);font-size:13px}
 .legal{margin-top:26px;text-align:center;color:var(--muted);font-size:12px}.legal a{color:var(--muted);margin:0 7px}.legal a:hover{color:var(--red)}
-@media(max-width:650px){.wrap{width:min(100% - 22px,920px);padding-top:22px}.card{padding:17px}.history-item{grid-template-columns:1fr}.table-wrap{overflow:auto}}
+@media(max-width:650px){.wrap{width:min(100% - 22px,920px);padding-top:22px}.card{padding:17px}.history-item,.lab-grid{grid-template-columns:1fr}.table-wrap{overflow:auto}}
 </style>
 </head>
 <body>
@@ -60,6 +61,18 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;v
       <div class="row"><div class="field"><label>Saved locally</label><div class="hint">SQLite history persists in the Docker volume.</div></div><button class="secondary" id="refresh">Refresh history</button></div>
       <div id="history" class="status">No scans loaded.</div>
     </section>
+
+    <section class="card">
+      <div class="lab-grid">
+        <div>
+          <label>AI Lab</label>
+          <h2 style="margin:3px 0 6px">Pentest a disposable copy of your code</h2>
+          <div class="hint"><span class="dot" id="labDot"></span><span id="labStatus">Checking optional engine…</span></div>
+          <p class="notice">Attach a Git repository or source archive, bring your own LLM, and run source-assisted testing in the isolated lab. Production remains out of scope.</p>
+        </div>
+        <div class="lab-actions"><a id="labOpen" class="disabled" href="#" target="_blank" rel="noopener noreferrer">Open AI Lab</a></div>
+      </div>
+    </section>
   </div>
   <footer class="legal"><p>Only scan systems you own or are authorized to assess. Cerberus is a diagnostic, not a security guarantee.</p><p><a href="https://cerberusscan.com/help.html" target="_blank" rel="noopener noreferrer">Help</a><a href="https://cerberusscan.com/privacy.html" target="_blank" rel="noopener noreferrer">Privacy</a><a href="https://cerberusscan.com/terms.html" target="_blank" rel="noopener noreferrer">Terms</a><a href="https://cerberusscan.com/disclaimer.html" target="_blank" rel="noopener noreferrer">Disclaimer</a><a href="https://cerberusscan.com/license.html" target="_blank" rel="noopener noreferrer">AGPL-3.0</a></p></footer>
 </main>
@@ -67,8 +80,9 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;v
 const $=id=>document.getElementById(id);let key=sessionStorage.getItem('cerberus-key')||'';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path,opts={}){const headers=Object.assign({'X-API-Key':key},opts.headers||{});const r=await fetch(path,Object.assign({},opts,{headers}));let j={};try{j=await r.json()}catch{}if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
-async function unlock(){key=$('apiKey').value.trim();if(!key){$('keyStatus').textContent='Enter the API key.';return}try{await api('/history');sessionStorage.setItem('cerberus-key',key);$('keyCard').classList.add('hidden');$('app').classList.remove('hidden');await history()}catch(e){$('keyStatus').className='status error';$('keyStatus').textContent='Unlock failed: '+e.message}}
+async function unlock(){key=$('apiKey').value.trim();if(!key){$('keyStatus').textContent='Enter the API key.';return}try{await api('/history');sessionStorage.setItem('cerberus-key',key);$('keyCard').classList.add('hidden');$('app').classList.remove('hidden');await Promise.all([history(),labStatus()])}catch(e){$('keyStatus').className='status error';$('keyStatus').textContent='Unlock failed: '+e.message}}
 async function history(){try{const j=await api('/history');const scans=j.scans||[];$('history').innerHTML=scans.length?scans.map(s=>'<div class="history-item"><div><b>'+esc(s.target)+'</b><br><small>'+esc(new Date(s.created_at).toLocaleString())+'</small></div><span class="'+esc(s.worst_severity)+'">'+esc(s.worst_severity).toUpperCase()+'</span><span>'+Number(s.finding_count||0)+' findings</span></div>').join(''):'No saved scans yet.'}catch(e){$('history').textContent='History unavailable: '+e.message}}
+async function labStatus(){try{const j=await api('/ai-lab/status');const open=$('labOpen');if(j.configured&&j.reachable){$('labDot').classList.add('on');$('labStatus').textContent='Ready · '+esc(j.engine)+' · '+esc(j.state||'idle');open.href=location.protocol+'//'+location.hostname+':'+Number(j.public_port||9137);open.classList.remove('disabled')}else if(j.configured){$('labStatus').textContent='Configured but starting or unavailable';open.classList.add('disabled')}else{$('labStatus').textContent='Not installed · enable with compose.ai-lab.yaml';open.classList.add('disabled')}}catch(e){$('labStatus').textContent='Status unavailable: '+e.message}}
 async function run(){const url=$('target').value.trim();const heads=[...document.querySelectorAll('.heads input:checked')].map(x=>x.value);if(!url||!heads.length){$('scanStatus').textContent='Enter a URL and choose at least one check.';return}$('scan').disabled=true;$('results').classList.add('hidden');$('term').style.display='block';$('term').textContent='Submitting scan…';try{const j=await api('/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,heads,client:'selfhost'})});await poll(j.job_id)}catch(e){$('scanStatus').className='status error';$('scanStatus').textContent='Scan failed: '+e.message}$('scan').disabled=false}
 async function poll(id){for(let i=0;i<240;i++){const j=await api('/scan/'+encodeURIComponent(id));$('term').textContent=(j.log||[]).join('\n');$('term').scrollTop=$('term').scrollHeight;if(j.status==='done'){render(j);await history();return}if(j.status==='error')throw new Error(j.error||'scan failed');$('scanStatus').textContent='Scanning… '+(i*2)+'s';await new Promise(r=>setTimeout(r,2000))}throw new Error('scan timed out')}
 function render(j){$('scanStatus').className='status good';$('scanStatus').textContent='Scan complete.';$('summary').innerHTML='<span class="pill">'+esc(j.target)+'</span><span class="pill '+esc(j.worst)+'">'+Number(j.count||0)+' findings · '+esc(j.worst).toUpperCase()+'</span>';$('rows').innerHTML=(j.findings||[]).map(f=>'<tr><td class="'+esc(f.severity)+'">'+esc(f.severity).toUpperCase()+'</td><td>'+esc(f.head)+'</td><td><b>'+esc(f.title)+'</b></td><td>'+esc(f.detail)+'</td></tr>').join('')||'<tr><td colspan="4">No findings.</td></tr>';$('results').classList.remove('hidden')}

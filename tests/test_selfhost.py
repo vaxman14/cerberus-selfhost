@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cerberus import persistence, reporting
+from cerberus import ai_lab, persistence, reporting
 from cerberus.auth_gate import AuthorizationError, AuthorizationGate
 from cerberus.models import AuthRecord, Finding, Head, ScanResult, Severity
 
@@ -62,6 +62,38 @@ class ReportSupportLinkTests(unittest.TestCase):
         report = reporting.render_client(
             ScanResult(target="https://example.com", client="selfhost"))
         self.assertIn("https://buymeacoffee.com/romanvaxman", report)
+
+
+class AILabStatusTests(unittest.TestCase):
+    def test_disabled_lab_does_not_probe_or_disclose_credentials(self):
+        with patch.dict(os.environ, {
+            "CERBERUS_AI_LAB_ENABLED": "false",
+            "CERBERUS_AI_USERNAME": "operator",
+            "CERBERUS_AI_PASSWORD": "do-not-return",
+        }, clear=False):
+            value = ai_lab.status()
+        self.assertEqual(value["engine"], "Xalgorix")
+        self.assertFalse(value["configured"])
+        self.assertFalse(value["reachable"])
+        self.assertNotIn("username", value)
+        self.assertNotIn("password", value)
+
+    def test_enabled_lab_reports_redacted_reachability(self):
+        response = unittest.mock.MagicMock()
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        response.read.return_value = b'{"auth_required":true}'
+        with patch.dict(os.environ, {
+            "CERBERUS_AI_LAB_ENABLED": "true",
+            "CERBERUS_AI_URL": "http://cerberus-ai:9137",
+            "CERBERUS_AI_USERNAME": "operator",
+            "CERBERUS_AI_PASSWORD": "secret",
+        }, clear=False), patch("urllib.request.urlopen", return_value=response):
+            value = ai_lab.status()
+        self.assertTrue(value["configured"])
+        self.assertTrue(value["reachable"])
+        self.assertEqual(value["state"], "ready")
+        self.assertNotIn("url", value)
 
 
 if __name__ == "__main__":

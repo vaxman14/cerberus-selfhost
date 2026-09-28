@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
-from . import runner, reporting, persistence
+from . import ai_lab, runner, reporting, persistence
 from .models import ScanResult, Finding, Head, Severity
 
 API_KEY = os.environ.get("CERBERUS_API_KEY", "")
@@ -154,6 +154,8 @@ class Handler(BaseHTTPRequestHandler):
             scans = persistence.list_scans(
                 client=None if is_admin else (user["email"] or user["id"]), limit=100)
             return self._send(200, {"scans": scans})
+        if path == "/ai-lab/status":
+            return self._send(200, ai_lab.status())
         if path.startswith("/report/"):
             sid = path.split("/report/", 1)[1]
             scan = persistence.get_scan(sid)

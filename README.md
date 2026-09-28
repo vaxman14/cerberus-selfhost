@@ -14,6 +14,42 @@ Results and history stay in a local SQLite database inside a Docker volume.
 There is no required cloud account, hosted database, analytics service, or
 external login provider.
 
+## Optional AI Lab
+
+Cerberus AI Lab adds repo-assisted autonomous security testing for apps you
+own. It uses the maintained Apache-2.0 [Xalgorix](https://github.com/xalgorix/xalgorix)
+engine for BYO-LLM orchestration, source review, disposable local provisioning,
+browser-assisted DAST, evidence validation, and PDF reports.
+
+Generate a separate AI Lab password and put it after
+`CERBERUS_AI_PASSWORD=` in `.env`:
+
+```bash
+openssl rand -hex 24
+```
+
+Then start both services:
+
+```bash
+docker compose -f compose.yaml -f compose.ai-lab.yaml up -d
+```
+
+Open Cerberus and choose **Open AI Lab**, or browse directly to
+<http://127.0.0.1:9137>. Configure your own model/provider under
+**Settings → LLM**, attach a Git URL or source `.zip`, and choose
+**Provision + DAST** to build and test a disposable copy. **Review** performs
+source-only analysis.
+
+The shipped overlay grants no host-Docker access or privileged mode. It drops
+Linux capabilities except `NET_RAW`, enables `no-new-privileges`, sets resource
+ceilings and conservative rate limits, and publishes only to localhost by
+default. Low-level tools requiring broader kernel privileges may be unavailable;
+web-application testing is the intended use.
+
+Your LLM key and Lab artifacts stay in the separate `cerberus-ai-data` Docker
+volume. Requests to a remote model provider leave your machine and are governed
+by that provider's terms and privacy policy.
+
 Website, installation guide, and policies: <https://cerberusscan.com>
 
 ## Quick start
@@ -91,6 +127,10 @@ does not expose Cerberus's active testing head and does not install Nuclei,
 OWASP ZAP, or sqlmap. Active testing has materially different legal and
 operational risk; it is intentionally outside the one-command self-hosted
 quick start.
+
+AI Lab is also limited to applications you own or are explicitly authorized to
+test. Use synthetic data and sanitized configuration. Never upload production
+secrets, customer databases, or credentials to a scan workspace.
 
 ## Development
 

@@ -6,6 +6,11 @@ Use Cerberus only against systems you own or are explicitly authorized to
 assess. You are responsible for authorization, deployment security, target
 impact, and all activity through your installation.
 
+This restriction includes AI Lab source review, locally provisioned application
+copies, and autonomous testing driven by a connected model. You are responsible
+for removing secrets and personal data before uploading source or configuration
+and for the costs and terms of your chosen model provider.
+
 Cerberus is an automated diagnostic. Results can be incomplete or inaccurate
 and are not a guarantee of security, compliance, or fitness for any purpose.
 The software, reports, and documentation are provided as is, without a support
