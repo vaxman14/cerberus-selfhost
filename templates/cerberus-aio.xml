@@ -6,7 +6,7 @@
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Icon>https://cerberusscan.com/cerberus-still.jpg</Icon>
+  <Icon>https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/launch/product-hunt/assets/thumbnail-240.png</Icon>
   <WebUI>http://[IP]:[PORT:8099]</WebUI>
   <Overview>Cerberus is a self-hosted website security and quality scanner with local Lighthouse, Nuclei, OWASP ZAP, sqlmap, local users, history, PDF-ready reports, and optional AI analysis. This AIO master launches the isolated child stack. It requires the Docker socket, which grants control of the Docker host; install only the official image and review release notes before updating.</Overview>
   <Project>https://github.com/vaxman14/cerberus-selfhost</Project>
@@ -20,6 +20,9 @@
   <Date>2026-09-28</Date>
   <MinVer>7.0</MinVer>
   <License>AGPL-3.0-only</License>
+  <Screenshot>https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/launch/product-hunt/assets/gallery-01-dashboard.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/launch/product-hunt/assets/gallery-02-history.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/launch/product-hunt/assets/gallery-03-report.png</Screenshot>
   <DonateText>Feed Cerberus's dad a coffee</DonateText>
   <DonateLink>https://buymeacoffee.com/romanvaxman</DonateLink>
   <Config Name="Web UI" Target="8099" Default="8099" Mode="tcp" Description="Cerberus web interface port." Type="Port" Display="always" Required="true" Mask="false">8099</Config>

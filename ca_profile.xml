@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <CommunityApplications>
   <Profile>Official Cerberus self-hosted website security scanner images and Unraid AIO template, maintained by CTF Designs.</Profile>
-  <Icon>https://cerberusscan.com/cerberus-still.jpg</Icon>
+  <Icon>https://raw.githubusercontent.com/vaxman14/cerberus-selfhost/main/launch/product-hunt/assets/thumbnail-240.png</Icon>
   <WebPage>https://cerberusscan.com</WebPage>
   <DonateLink>https://buymeacoffee.com/romanvaxman</DonateLink>
   <DonateText>Feed Cerberus's dad a coffee</DonateText>
