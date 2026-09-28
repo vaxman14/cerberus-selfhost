@@ -185,6 +185,16 @@ class Handler(BaseHTTPRequestHandler):
                 "profiles": persistence.list_llm_profiles(),
                 "vault_ready": vault.master_key_available(),
             })
+        if path.startswith("/ai-lab/subscriptions/") and path.endswith("/status"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 4:
+                try:
+                    return self._send(200, {
+                        "status": llm.subscription_status(parts[2]),
+                        "login": llm.subscription_login_state(parts[2]),
+                    })
+                except llm.LLMError as exc:
+                    return self._send_llm_error(exc)
         if path.startswith("/report/"):
             sid = path.split("/report/", 1)[1]
             scan = persistence.get_scan(sid)
@@ -243,6 +253,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"profile": llm.save_profile(params)})
             if path == "/ai-lab/providers/discover":
                 return self._send(200, llm.discover_connection(params))
+            if path.startswith("/ai-lab/subscriptions/"):
+                parts = path.strip("/").split("/")
+                if len(parts) == 4 and parts[3] == "login":
+                    return self._send(200, llm.start_subscription_login(parts[2]))
+                if len(parts) == 4 and parts[3] == "code":
+                    return self._send(200, llm.submit_subscription_code(
+                        parts[2], str(params.get("code", ""))))
             if path.startswith("/ai-lab/providers/"):
                 parts = path.strip("/").split("/")
                 if len(parts) == 4 and parts[3] == "discover":

@@ -124,6 +124,47 @@ class CredentialVaultTests(unittest.TestCase):
 
 
 class LLMProfileTests(unittest.TestCase):
+    def test_full_josi_picker_catalog_includes_api_and_subscription_paths(self):
+        providers = {item["kind"]: item for item in llm.provider_catalog()}
+        self.assertEqual(len(providers), 20)
+        for required in (
+            "openai_compatible", "openai", "anthropic", "xai", "gemini", "deepseek",
+            "qwen", "mistral", "moonshot", "zhipu", "cohere", "openrouter", "minimax",
+            "baidu", "hunyuan", "azure_openai", "aws_bedrock", "vertex_ai",
+            "openai_subscription", "anthropic_subscription",
+        ):
+            self.assertIn(required, providers)
+        self.assertEqual(providers["openai_subscription"]["wire"], "codex")
+        self.assertEqual(providers["anthropic_subscription"]["wire"], "claude")
+
+    def test_gemini_discovery_uses_native_header_and_filters_non_generate_models(self):
+        response = unittest.mock.MagicMock()
+        response.ok = True
+        response.status_code = 200
+        response.json.return_value = {"models": [
+            {"name": "models/gemini-test", "displayName": "Gemini Test",
+             "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/embed-test", "supportedGenerationMethods": ["embedContent"]},
+        ]}
+        with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]), patch(
+            "requests.get", return_value=response
+        ) as get:
+            result = llm.discover_connection({
+                "provider": "gemini", "api_key": "fixture", "external_acknowledged": True,
+            })
+        self.assertEqual(result["models"][0]["id"], "gemini-test")
+        self.assertEqual(get.call_args.kwargs["headers"]["x-goog-api-key"], "fixture")
+        self.assertNotIn("Authorization", get.call_args.kwargs["headers"])
+
+    def test_subscription_profile_never_accepts_an_api_key(self):
+        with patch.object(llm, "subscription_status", return_value={"signed_in": True}):
+            with self.assertRaises(llm.LLMError) as raised:
+                llm.save_profile({
+                    "provider": "openai_subscription", "api_key": "must-not-be-used",
+                    "external_acknowledged": True,
+                })
+        self.assertIn("do not accept API keys", str(raised.exception))
+
     def test_provider_key_is_ciphertext_only_and_api_is_masked(self):
         with tempfile.TemporaryDirectory() as tmp:
             key_path = CredentialVaultTests()._key_file(tmp, b"c" * 32)
