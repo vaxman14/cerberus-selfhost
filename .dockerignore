@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.venv
+__pycache__
+*.py[cod]
+*.sqlite*
+*.db
+tests
+promo
+webconsole
+console-web
+deploy
+migrations
+BUILD_PLAN.md

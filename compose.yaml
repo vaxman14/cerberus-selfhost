@@ -1,0 +1,26 @@
+services:
+  cerberus:
+    build:
+      context: .
+    image: cerberus-selfhost:latest
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      CERBERUS_API_KEY: ${CERBERUS_API_KEY:?Set CERBERUS_API_KEY in .env}
+      CERBERUS_AUTH_MODE: apikey
+      CERBERUS_DB_PATH: /data/cerberus.db
+      PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+    ports:
+      - "${CERBERUS_BIND:-127.0.0.1}:${CERBERUS_PORT:-8099}:8099"
+    volumes:
+      - cerberus-data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+
+volumes:
+  cerberus-data:

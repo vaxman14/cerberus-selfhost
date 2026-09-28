@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Cerberus — Self-hosted Website Scanner</title>
+<style>
+:root{--red:#ff3b24;--bg:#08090d;--card:#111319;--ink:#f1eee8;--muted:#9299a8;--line:#292d38;--green:#57d977;--yellow:#ffd23f}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% -20%,#36130e 0,transparent 36%),var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+.wrap{width:min(920px,calc(100% - 32px));margin:auto;padding:34px 0 72px}.top{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+h1{font-size:clamp(28px,6vw,46px);margin:0;letter-spacing:-.04em}h1 span{color:var(--red)}.sub{color:var(--muted);margin-top:4px}.coffee{display:inline-flex;align-items:center;gap:7px;background:var(--yellow);color:#111;text-decoration:none;font-weight:800;padding:10px 16px;border-radius:999px}
+.card{background:rgba(17,19,25,.96);border:1px solid var(--line);border-radius:16px;padding:22px;margin-top:20px;box-shadow:0 20px 50px rgba(0,0,0,.22)}
+.row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.field{flex:1 1 250px}label{display:block;margin-bottom:7px;color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+input[type=url],input[type=password]{width:100%;border:1px solid var(--line);border-radius:10px;background:#090b10;color:var(--ink);padding:12px 13px;font:inherit;outline:none}input:focus{border-color:var(--red)}
+button{border:0;border-radius:10px;background:var(--red);color:#fff;padding:12px 18px;font:inherit;font-weight:800;cursor:pointer}button.secondary{background:#20242d;color:var(--ink)}button:disabled{opacity:.5;cursor:wait}
+.heads{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}.heads label{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px;text-transform:none;letter-spacing:0;margin:0}.hint,.status{color:var(--muted);font-size:13px}.status{margin-top:13px;min-height:20px}.error{color:#ff7868}.good{color:var(--green)}
+.term{display:none;margin-top:14px;height:260px;overflow:auto;white-space:pre-wrap;background:#050607;border:1px solid var(--line);border-radius:11px;padding:14px;color:#cbd3ca;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.pill{border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;vertical-align:top;padding:10px 8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.critical,.high{color:#ff6653}.medium{color:#f3c344}.low{color:#7edb92}.info{color:#94a0b5}
+.history-item{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}.history-item small{color:var(--muted)}
+.hidden{display:none}.notice{border-left:3px solid var(--yellow);padding-left:12px;color:var(--muted);font-size:13px}
+@media(max-width:650px){.wrap{width:min(100% - 22px,920px);padding-top:22px}.card{padding:17px}.history-item{grid-template-columns:1fr}.table-wrap{overflow:auto}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div><h1>Cerber<span>us</span></h1><div class="sub">Self-hosted passive website security and quality scanner</div></div>
+    <a class="coffee" href="https://buymeacoffee.com/romanvaxman" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
+  </header>
+
+  <section class="card" id="keyCard">
+    <label for="apiKey">API key</label>
+    <div class="row"><div class="field"><input id="apiKey" type="password" autocomplete="current-password" placeholder="Value from CERBERUS_API_KEY"></div><button id="unlock">Unlock</button></div>
+    <p class="hint">Kept in this tab only. Cerberus does not send it anywhere except this server.</p>
+    <div class="status" id="keyStatus"></div>
+  </section>
+
+  <div id="app" class="hidden">
+    <section class="card">
+      <label for="target">Target website</label>
+      <div class="row"><div class="field"><input id="target" type="url" inputmode="url" placeholder="https://example.com"></div><button id="scan">Run scan</button></div>
+      <div class="heads">
+        <label><input type="checkbox" value="frontend" checked> Surface</label>
+        <label><input type="checkbox" value="nose" checked> DNS &amp; exposure</label>
+        <label><input type="checkbox" value="speed" checked> Performance</label>
+      </div>
+      <p class="notice">Scan only websites you own or are authorized to assess. The Docker quick start intentionally exposes passive checks only.</p>
+      <div class="status" id="scanStatus"></div><pre class="term" id="term"></pre>
+    </section>
+
+    <section class="card hidden" id="results">
+      <div class="summary" id="summary"></div>
+      <div class="table-wrap"><table><thead><tr><th>Severity</th><th>Head</th><th>Finding</th><th>Detail</th></tr></thead><tbody id="rows"></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <div class="row"><div class="field"><label>Saved locally</label><div class="hint">SQLite history persists in the Docker volume.</div></div><button class="secondary" id="refresh">Refresh history</button></div>
+      <div id="history" class="status">No scans loaded.</div>
+    </section>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);let key=sessionStorage.getItem('cerberus-key')||'';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,opts={}){const headers=Object.assign({'X-API-Key':key},opts.headers||{});const r=await fetch(path,Object.assign({},opts,{headers}));let j={};try{j=await r.json()}catch{}if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
+async function unlock(){key=$('apiKey').value.trim();if(!key){$('keyStatus').textContent='Enter the API key.';return}try{await api('/history');sessionStorage.setItem('cerberus-key',key);$('keyCard').classList.add('hidden');$('app').classList.remove('hidden');await history()}catch(e){$('keyStatus').className='status error';$('keyStatus').textContent='Unlock failed: '+e.message}}
+async function history(){try{const j=await api('/history');const scans=j.scans||[];$('history').innerHTML=scans.length?scans.map(s=>'<div class="history-item"><div><b>'+esc(s.target)+'</b><br><small>'+esc(new Date(s.created_at).toLocaleString())+'</small></div><span class="'+esc(s.worst_severity)+'">'+esc(s.worst_severity).toUpperCase()+'</span><span>'+Number(s.finding_count||0)+' findings</span></div>').join(''):'No saved scans yet.'}catch(e){$('history').textContent='History unavailable: '+e.message}}
+async function run(){const url=$('target').value.trim();const heads=[...document.querySelectorAll('.heads input:checked')].map(x=>x.value);if(!url||!heads.length){$('scanStatus').textContent='Enter a URL and choose at least one check.';return}$('scan').disabled=true;$('results').classList.add('hidden');$('term').style.display='block';$('term').textContent='Submitting scan…';try{const j=await api('/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,heads,client:'selfhost'})});await poll(j.job_id)}catch(e){$('scanStatus').className='status error';$('scanStatus').textContent='Scan failed: '+e.message}$('scan').disabled=false}
+async function poll(id){for(let i=0;i<240;i++){const j=await api('/scan/'+encodeURIComponent(id));$('term').textContent=(j.log||[]).join('\n');$('term').scrollTop=$('term').scrollHeight;if(j.status==='done'){render(j);await history();return}if(j.status==='error')throw new Error(j.error||'scan failed');$('scanStatus').textContent='Scanning… '+(i*2)+'s';await new Promise(r=>setTimeout(r,2000))}throw new Error('scan timed out')}
+function render(j){$('scanStatus').className='status good';$('scanStatus').textContent='Scan complete.';$('summary').innerHTML='<span class="pill">'+esc(j.target)+'</span><span class="pill '+esc(j.worst)+'">'+Number(j.count||0)+' findings · '+esc(j.worst).toUpperCase()+'</span>';$('rows').innerHTML=(j.findings||[]).map(f=>'<tr><td class="'+esc(f.severity)+'">'+esc(f.severity).toUpperCase()+'</td><td>'+esc(f.head)+'</td><td><b>'+esc(f.title)+'</b></td><td>'+esc(f.detail)+'</td></tr>').join('')||'<tr><td colspan="4">No findings.</td></tr>';$('results').classList.remove('hidden')}
+$('unlock').onclick=unlock;$('apiKey').onkeydown=e=>{if(e.key==='Enter')unlock()};$('scan').onclick=run;$('refresh').onclick=history;if(key){$('apiKey').value=key;unlock()}
+</script>
+</body>
+</html>
