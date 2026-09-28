@@ -58,7 +58,7 @@ docker volume create cerberus-aio-config
 docker run -d \
   --name cerberus-aio \
   --restart unless-stopped \
-  -p 127.0.0.1:8099:8099 \
+  -p 8099:8099 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v cerberus-aio-config:/config \
   -e CERBERUS_AIO_CONFIG_VOLUME=cerberus-aio-config \
@@ -66,14 +66,18 @@ docker run -d \
   romanvaxman/cerberus-aio:0.2.0
 ```
 
-The `-p 127.0.0.1:8099:8099` option intentionally makes Cerberus reachable
-only from the Docker host. Follow startup progress with
-`docker logs -f cerberus-aio`. When the log reports
+The AIO command publishes port `8099` on the Docker host. Do not expose or
+port-forward it to the public internet. If the host has a public interface,
+restrict the port with its firewall or bind it to a specific private address,
+for example `-p 192.168.1.50:8099:8099`.
+
+Follow startup progress with `docker logs -f cerberus-aio`. When the log reports
 `proxy listening on container port 8099`, press `Ctrl+C`; this stops following
-the logs but leaves Cerberus running. Then open **<http://127.0.0.1:8099>** in
-a browser on the Docker host and create the first owner. If Docker is on
-another machine, use the SSH tunnel described above and open that same URL in
-the browser on your computer.
+the logs but leaves Cerberus running. Then open
+**`http://DOCKER-HOST-IP:8099`** in a browser and create the first owner
+immediately. On the Docker host itself, <http://127.0.0.1:8099> also works. To
+keep AIO localhost-only, use `-p 127.0.0.1:8099:8099` and the SSH tunnel
+described above.
 
 ## Data, updates, and removal
 

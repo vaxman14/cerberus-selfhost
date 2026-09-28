@@ -29,10 +29,13 @@ curl http://127.0.0.1:8099/health
 
 ## Safe exposure
 
-Cerberus binds to `127.0.0.1` by default. Use an HTTPS reverse proxy for remote
-access and forward the original scheme so secure session cookies work. You may
-instead bind to one private interface and enforce access with the host firewall.
-Never publish the tools worker or ZAP ports.
+The recommended Compose setup binds to `127.0.0.1` by default. Use an HTTPS
+reverse proxy for remote access and forward the original scheme so secure
+session cookies work. The optional AIO command publishes the web UI on host
+port `8099` for LAN access; do not expose or port-forward it to the public
+internet. On a host with a public interface, bind AIO to one private address
+and enforce access with the host firewall. Never publish the tools or ZAP
+worker ports.
 
 ## Scans, history, reports, and models
 

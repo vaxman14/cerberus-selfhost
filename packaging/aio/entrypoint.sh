@@ -44,6 +44,6 @@ master_container=$(hostname)
 docker network connect cerberus-aio_default "$master_container" 2>/dev/null || true
 
 echo "Cerberus AIO: child stack started; proxy listening on container port 8099"
-echo "Cerberus AIO: open the host address published with docker run (documented default: http://127.0.0.1:8099)"
+echo "Cerberus AIO: open http://DOCKER-HOST-IP:8099 (or http://127.0.0.1:8099 on the Docker host)"
 echo "Cerberus AIO: restarting this master checks for image updates"
 exec socat TCP-LISTEN:8099,fork,reuseaddr TCP:cerberus:8099

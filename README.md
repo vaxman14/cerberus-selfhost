@@ -74,8 +74,11 @@ The optional `romanvaxman/cerberus-aio:0.2.0` master image provides a
 single-container Community Apps entry while launching the isolated child
 stack. It requires `/var/run/docker.sock`, which grants effective control of
 the Docker host. The ordinary Compose install does not mount the socket and is
-safer when one-click Unraid installation is unnecessary. See
-[the Unraid notes](docs/UNRAID.md).
+safer when one-click Unraid installation is unnecessary. The documented AIO
+command publishes the web UI on host port `8099` for LAN access; do not expose
+or port-forward that port to the public internet. See
+[the AIO installation steps](docs/INSTALL.md#docker-hub-aio-alternative) and
+[Unraid notes](docs/UNRAID.md).
 
 ## Security boundary
 

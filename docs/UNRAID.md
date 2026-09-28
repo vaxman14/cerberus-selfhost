@@ -12,6 +12,10 @@ Docker host. Use only the official release image and review updates. The
 ordinary repository Compose install does **not** mount the Docker socket and is
 the safer choice when one-click Unraid installation is not required.
 
+The web UI is published on host port `8099` for LAN access. Do not expose or
+port-forward that port to the public internet; use the host firewall or a
+restricted HTTPS reverse proxy when the Docker host has a public interface.
+
 ## Updates and data
 
 Restarting the AIO master pulls the configured child images and reconciles the
