@@ -29,14 +29,18 @@ def step(log, out, name: str, fn) -> None:
     """Run check fn() (which appends Findings to `out`), then log one result
     line reflecting what it found: PASS clean, WARN low/med, FAIL high/crit."""
     before = len(out)
+    error = None
     try:
         fn()
         st = _status(out[before:])
-    except Exception:
+    except Exception as exc:
         st = "skip"
+        error = str(exc)[:180]
     if _DELAY:
         time.sleep(_DELAY)
     log(_fmt(name, st))
+    if error:
+        log(f"      {error}")
 
 
 def say(log, msg: str) -> None:

@@ -7,9 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cerberus import llm, local_auth, persistence, reporting, runner, vault
+from cerberus import llm, local_auth, persistence, reporting, runner, tools_api, vault
 from cerberus.cancellation import ScanCancelled
 from cerberus.auth_gate import AuthorizationError, AuthorizationGate
+from cerberus.heads import backend
 from cerberus.models import AuthRecord, Finding, Head, ScanResult, Severity
 
 
@@ -73,6 +74,42 @@ class ActiveScanGateTests(unittest.TestCase):
         with self.assertRaises(ScanCancelled):
             runner.run_scan(
                 "https://example.com", heads=("frontend",), cancel_event=stopped)
+
+
+class ActiveToolResultTests(unittest.TestCase):
+    def test_sqlmap_negative_sentence_is_not_a_vulnerability(self):
+        completed = unittest.mock.MagicMock(
+            returncode=0,
+            stdout="all tested parameters do not appear to be injectable",
+            stderr="",
+        )
+        with patch.object(tools_api, "_run", return_value=completed):
+            self.assertFalse(tools_api.sqlmap("https://example.com")["vulnerable"])
+
+    def test_sqlmap_requires_a_positive_injection_signature(self):
+        completed = unittest.mock.MagicMock(
+            returncode=0,
+            stdout="sqlmap identified the following injection point\nType: boolean-based blind",
+            stderr="",
+        )
+        with patch.object(tools_api, "_run", return_value=completed):
+            self.assertTrue(tools_api.sqlmap("https://example.com")["vulnerable"])
+
+    def test_duplicate_nuclei_findings_are_collapsed(self):
+        item = {
+            "title": "nuclei: Weak Cipher Suites Detection", "severity": "low",
+            "detail": "weak cipher", "evidence": "example.com:443", "remediation": "",
+        }
+        with patch.object(backend.tool_client, "run", return_value={"findings": [item, item]}):
+            self.assertEqual(len(backend._nuclei("https://example.com")), 1)
+
+    def test_nuclei_failure_is_not_reported_as_a_vulnerability(self):
+        with patch.object(
+            backend.tool_client, "run",
+            side_effect=backend.tool_client.ToolServiceError("timed out"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "did not complete"):
+                backend._nuclei("https://example.com")
 
 
 class ReportSupportLinkTests(unittest.TestCase):

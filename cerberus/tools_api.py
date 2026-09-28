@@ -156,7 +156,17 @@ def sqlmap(url: str, run_id: str = "") -> dict:
         "--disable-coloring", "--output-dir=/tmp/sqlmap-output",
     ], timeout=900, run_id=run_id)
     output = f"{result.stdout}\n{result.stderr}"
-    vulnerable = bool(re.search(r"is vulnerable|injectable", output, re.I))
+    negative = bool(re.search(
+        r"all tested parameters do not appear to be injectable|"
+        r"does not seem to be injectable|not injectable",
+        output, re.I,
+    ))
+    vulnerable = not negative and bool(re.search(
+        r"sqlmap identified the following injection point|"
+        r"parameter\s+['\"][^'\"]+['\"]\s+is vulnerable|"
+        r"Type:\s+(?:boolean-based blind|error-based|time-based blind|UNION query)",
+        output, re.I,
+    ))
     return {"vulnerable": vulnerable, "completed": result.returncode in {0, 1}}
 
 

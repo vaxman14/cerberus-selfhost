@@ -62,13 +62,22 @@ def _nuclei(url: str, run_id: str = "") -> list[Finding]:
     try:
         payload = tool_client.run("nuclei", url, timeout=680, run_id=run_id)
     except tool_client.ToolServiceError as exc:
-        return [Finding(Head.BACKEND, "Nuclei unavailable", Severity.INFO, str(exc))]
-    return [Finding(
-        Head.BACKEND, str(item.get("title", "Nuclei finding"))[:200],
-        _map_sev(str(item.get("severity", "info"))), str(item.get("detail", ""))[:400],
-        evidence=str(item.get("evidence", ""))[:160],
-        remediation=str(item.get("remediation", ""))[:400],
-    ) for item in payload.get("findings", [])]
+        raise RuntimeError(f"Nuclei scan did not complete: {str(exc)[:160]}") from exc
+    findings: list[Finding] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in payload.get("findings", []):
+        title = str(item.get("title", "Nuclei finding"))[:200]
+        detail = str(item.get("detail", ""))[:400]
+        evidence = str(item.get("evidence", ""))[:160]
+        identity = (title, detail, evidence)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        findings.append(Finding(
+            Head.BACKEND, title, _map_sev(str(item.get("severity", "info"))), detail,
+            evidence=evidence, remediation=str(item.get("remediation", ""))[:400],
+        ))
+    return findings
 
 
 def _zap(url: str, cancel_event=None) -> list[Finding]:
@@ -90,9 +99,8 @@ def _zap(url: str, cancel_event=None) -> list[Finding]:
 
     try:
         api("core/view/version")
-    except Exception:
-        return [Finding(Head.BACKEND, "ZAP daemon not reachable", Severity.INFO,
-                        f"No ZAP API at {base}. Start ZAP in daemon mode on the runner.")]
+    except Exception as exc:
+        raise RuntimeError(f"ZAP daemon not reachable at {base}") from exc
     try:
         # Force the URL into ZAP's site tree first, else ascan-by-url 400s with
         # "URL Not Found in the Scan Tree".
@@ -119,7 +127,7 @@ def _zap(url: str, cancel_event=None) -> list[Finding]:
     except ScanCancelled:
         raise
     except Exception as e:
-        return [Finding(Head.BACKEND, "ZAP scan error", Severity.INFO, str(e)[:200])]
+        raise RuntimeError(f"ZAP active scan did not complete: {str(e)[:160]}") from e
     return [Finding(Head.BACKEND, f"ZAP: {a.get('alert', '')}", _map_sev(a.get("risk", "")),
                     (a.get("description", "") or "")[:400], evidence=str(a.get("url", ""))[:120],
                     remediation=(a.get("solution", "") or "")[:300]) for a in alerts]
