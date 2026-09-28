@@ -30,6 +30,35 @@ docker run -d \
   romanvaxman/cerberus-aio:0.2.0
 ```
 
+### What every line does
+
+- `docker volume create cerberus-aio-config` creates a persistent Docker volume
+  for generated secrets and AIO configuration. Replacing the launcher container
+  does not delete this volume.
+- `docker run -d` creates and starts the launcher in the background. The `\` at
+  the end of each following line means the command continues on the next line.
+- `--name cerberus-aio` gives the launcher a predictable name for logs,
+  restarts, and replacement commands.
+- `--restart unless-stopped` starts the launcher again after a Docker-host
+  reboot unless you deliberately stopped it.
+- `-p 8099:8099` publishes the Cerberus web interface on port `8099` of every
+  host interface, making it reachable from your LAN. Do not expose this port to
+  the public internet.
+- `-v /var/run/docker.sock:/var/run/docker.sock` lets the launcher ask the host
+  Docker daemon to create the isolated app, tools, and ZAP containers. This is
+  required by AIO and grants the launcher effective control of the Docker host.
+- `-v cerberus-aio-config:/config` mounts the persistent configuration volume at
+  `/config` inside the launcher.
+- `-e CERBERUS_AIO_CONFIG_VOLUME=cerberus-aio-config` tells the launcher the
+  exact named volume its child containers must use for shared generated
+  secrets. The name must match the volume mounted at `/config`.
+- `-e CERBERUS_ENABLE_ACTIVE_SCANS=false` keeps Nuclei, ZAP, and sqlmap scans
+  disabled. Passive checks still work; enable active scans only when you
+  understand their impact and have authorization for every target.
+- `romanvaxman/cerberus-aio:0.2.0` is the exact launcher image and immutable
+  release tag Docker runs. Pinning the version avoids an unexpected launcher
+  upgrade.
+
 ## Open Cerberus after installation
 
 The AIO command publishes port `8099` on the Docker host so a browser on your
@@ -43,6 +72,9 @@ Follow startup progress:
 ```bash
 docker logs -f cerberus-aio
 ```
+
+`docker logs` reads the launcher's output, and `-f` keeps following new lines
+while the child containers start.
 
 When the log reports `proxy listening on container port 8099`, press `Ctrl+C`
 to stop following the logs. This does not stop Cerberus. Then open
@@ -69,6 +101,10 @@ reconciles the stack:
 ```bash
 docker restart cerberus-aio
 ```
+
+This restarts only the AIO launcher. On startup it pulls the configured child
+images and reconciles the child stack. Named data and configuration volumes are
+preserved.
 
 Back up both `cerberus-aio-config` and `cerberus-aio-data`. The configuration
 volume contains the encryption key required to decrypt saved provider
