@@ -19,7 +19,7 @@ _OLD_HINTS = [
     (r"iis/[1-7]\.", "an old IIS (<8)"),
 ]
 
-_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
+_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
 
 def _base(url: str) -> str:

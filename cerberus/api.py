@@ -26,6 +26,13 @@ LOCK = threading.Lock()
 LOGIN_FAILURES: dict[str, list[float]] = {}
 
 
+def _active_job_id() -> str | None:
+    for job_id, job in JOBS.items():
+        if job.get("status") in {"running", "stopping"}:
+            return job_id
+    return None
+
+
 def _run_job(job_id: str, params: dict) -> None:
     def log_cb(line: str) -> None:
         with LOCK:
@@ -191,7 +198,11 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             return self._send_console()
         if path == "/health":
-            return self._send(200, {"ok": True})
+            return self._send(200, {
+                "ok": True,
+                "version": __import__("cerberus").__version__,
+                "schema_version": persistence.schema_version(),
+            })
         if path == "/auth/status":
             user = self._user()
             payload = {"setup_required": local_auth.setup_required(),
@@ -352,9 +363,6 @@ class Handler(BaseHTTPRequestHandler):
                 parts = path.strip("/").split("/")
                 if len(parts) == 4 and parts[3] == "login":
                     return self._send(200, llm.start_subscription_login(parts[2]))
-                if len(parts) == 4 and parts[3] == "code":
-                    return self._send(200, llm.submit_subscription_code(
-                        parts[2], str(params.get("code", ""))))
             if path.startswith("/ai-lab/providers/"):
                 parts = path.strip("/").split("/")
                 if len(parts) == 4 and parts[3] == "discover":
@@ -406,8 +414,15 @@ class Handler(BaseHTTPRequestHandler):
             params["heads"] = heads
             jid = uuid.uuid4().hex[:12]
             with LOCK:
-                JOBS[jid] = {"status": "running", "log": [], "user": user["id"]}
-                CANCEL_EVENTS[jid] = threading.Event()
+                active_job = _active_job_id()
+                if not active_job:
+                    JOBS[jid] = {"status": "running", "log": [], "user": user["id"]}
+                    CANCEL_EVENTS[jid] = threading.Event()
+            if active_job:
+                return self._send(409, {
+                    "error": "another scan is already running",
+                    "job_id": active_job,
+                })
             threading.Thread(target=_run_job, args=(jid, params), daemon=True).start()
             return self._send(202, {"job_id": jid, "status": "running"})
 

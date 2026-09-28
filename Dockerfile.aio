@@ -1,0 +1,26 @@
+FROM docker:29-cli@sha256:018edbc908e08fcc9dbf029c812c34251e9b4719e6f71ca0e5eae2a987d014ca
+
+ARG CERBERUS_VERSION=0.2.0
+ARG CERBERUS_REVISION=unknown
+ARG CERBERUS_CREATED=unknown
+
+LABEL org.opencontainers.image.title="Cerberus AIO master" \
+      org.opencontainers.image.description="Optional single-container launcher for the Cerberus Docker stack" \
+      org.opencontainers.image.source="https://github.com/vaxman14/cerberus-selfhost" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.version="${CERBERUS_VERSION}" \
+      org.opencontainers.image.revision="${CERBERUS_REVISION}" \
+      org.opencontainers.image.created="${CERBERUS_CREATED}"
+
+RUN apk upgrade --no-cache \
+    && apk add --no-cache openssl socat \
+    && rm -f /usr/local/libexec/docker/cli-plugins/docker-buildx
+COPY packaging/aio/compose.yaml /opt/cerberus/compose.yaml
+COPY packaging/aio/entrypoint.sh /usr/local/bin/cerberus-aio
+RUN chmod 0755 /usr/local/bin/cerberus-aio
+
+EXPOSE 8099
+HEALTHCHECK --interval=30s --timeout=8s --start-period=45s --retries=3 \
+  CMD wget -q -O- http://127.0.0.1:8099/health >/dev/null
+
+ENTRYPOINT ["/usr/local/bin/cerberus-aio"]

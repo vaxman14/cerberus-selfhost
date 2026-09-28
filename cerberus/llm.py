@@ -141,13 +141,6 @@ PROVIDERS = [
         "note": "Runs OpenAI's official Codex CLI with its own dedicated sign-in.",
         "residency": "Requests reach OpenAI through the official Codex CLI and use your ChatGPT plan.",
     },
-    {
-        "kind": "anthropic_subscription", "label": "My Claude plan (no API key)",
-        "external": True, "base_url": "", "api_key_required": False,
-        "wire": "claude", "discovery": "none", "subscription": True,
-        "note": "Runs Anthropic's official Claude Code CLI with its own dedicated sign-in.",
-        "residency": "Requests reach Anthropic through Claude Code and use your Claude plan.",
-    },
 ]
 PROVIDER_MAP = {provider["kind"]: provider for provider in PROVIDERS}
 MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/+\-]{0,179}$")
@@ -173,12 +166,12 @@ _LOGIN: dict[str, dict] = {}
 
 
 def subscription_status(provider: str) -> dict:
-    if provider not in {"openai_subscription", "anthropic_subscription"}:
-        raise LLMError("choose a subscription provider")
-    command = "codex" if provider == "openai_subscription" else "claude"
+    if provider != "openai_subscription":
+        raise LLMError("choose the ChatGPT subscription provider")
+    command = "codex"
     if not shutil.which(command):
         return {"installed": False, "signed_in": False, "detail": f"{command} is not installed."}
-    args = [command, "login", "status"] if command == "codex" else [command, "auth", "status", "--json"]
+    args = [command, "login", "status"]
     try:
         result = subprocess.run(
             args, text=True, capture_output=True, timeout=20,
@@ -187,21 +180,9 @@ def subscription_status(provider: str) -> dict:
     except (OSError, subprocess.TimeoutExpired):
         return {"installed": True, "signed_in": False, "detail": f"{command} could not report its status."}
     output = f"{result.stdout}\n{result.stderr}"
-    if command == "codex":
-        signed_in = result.returncode == 0 and not re.search(r"not logged in", output, re.I)
-        return {"installed": True, "signed_in": signed_in,
-                "detail": "Signed in." if signed_in else "Codex is installed but not signed in."}
-    try:
-        start, end = output.index("{"), output.rindex("}") + 1
-        payload = json.loads(output[start:end])
-    except (ValueError, json.JSONDecodeError):
-        return {"installed": True, "signed_in": False, "detail": "Claude Code returned unreadable status."}
-    signed_in = payload.get("loggedIn") is True and payload.get("authMethod") != "console"
-    detail = "Signed in with a Claude subscription." if signed_in else (
-        "Claude is signed into an API-billed Console account, not a subscription."
-        if payload.get("loggedIn") is True else "Claude Code is installed but not signed in."
-    )
-    return {"installed": True, "signed_in": signed_in, "detail": detail}
+    signed_in = result.returncode == 0 and not re.search(r"not logged in", output, re.I)
+    return {"installed": True, "signed_in": signed_in,
+            "detail": "Signed in." if signed_in else "Codex is installed but not signed in."}
 
 
 def _login_reader(provider: str, process: subprocess.Popen) -> None:
@@ -215,20 +196,11 @@ def _login_reader(provider: str, process: subprocess.Popen) -> None:
                 state = _LOGIN.get(provider)
                 if not state or state.get("process") is not process:
                     return
-                if provider == "openai_subscription":
-                    url = re.search(r"https://[a-z0-9.-]*openai\.com/\S+", cleaned, re.I)
-                    code = re.search(r"^\s*([A-Z0-9]{4,}(?:-[A-Z0-9]{4,})+)\s*$", cleaned, re.M)
-                    if url and code:
-                        state.update({"state": "awaiting_approval", "url": url.group(0),
-                                      "code": code.group(1), "message": None})
-                else:
-                    url = re.search(
-                        r"https://[a-z0-9.-]*(?:claude\.com|claude\.ai|anthropic\.com)/[^\s\"'<>]+",
-                        cleaned, re.I,
-                    )
-                    if url:
-                        state.update({"state": "awaiting_code", "url": url.group(0),
-                                      "code": None, "message": None})
+                url = re.search(r"https://[a-z0-9.-]*openai\.com/\S+", cleaned, re.I)
+                code = re.search(r"^\s*([A-Z0-9]{4,}(?:-[A-Z0-9]{4,})+)\s*$", cleaned, re.M)
+                if url and code:
+                    state.update({"state": "awaiting_approval", "url": url.group(0),
+                                  "code": code.group(1), "message": None})
     finally:
         return_code = process.wait()
         with _LOGIN_LOCK:
@@ -251,8 +223,7 @@ def start_subscription_login(provider: str) -> dict:
         current = _LOGIN.get(provider)
         if current and current.get("process") and current["process"].poll() is None:
             return {key: current.get(key) for key in ("state", "url", "code", "message")}
-        command = (["codex", "login", "--device-auth"] if provider == "openai_subscription"
-                   else ["claude", "auth", "login", "--claudeai"])
+        command = ["codex", "login", "--device-auth"]
         try:
             process = subprocess.Popen(
                 command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -280,23 +251,6 @@ def subscription_login_state(provider: str) -> dict:
             return {"state": "signed_in" if status["signed_in"] else "idle",
                     "url": None, "code": None, "message": status["detail"]}
         return {key: state.get(key) for key in ("state", "url", "code", "message")}
-
-
-def submit_subscription_code(provider: str, code: str) -> dict:
-    if provider != "anthropic_subscription":
-        raise LLMError("only Claude sign-in accepts a pasted code")
-    value = code.strip()
-    if not value or len(value) > 512:
-        raise LLMError("enter the one-time code from Anthropic")
-    with _LOGIN_LOCK:
-        state = _LOGIN.get(provider)
-        process = state.get("process") if state else None
-        if not process or process.poll() is not None or not process.stdin:
-            raise LLMError("that sign-in is no longer running; start again")
-        process.stdin.write(value + "\n")
-        process.stdin.flush()
-        state["state"] = "verifying"
-    return subscription_login_state(provider)
 
 
 def _blocked_address(address: str) -> str | None:
@@ -664,17 +618,16 @@ def _cohere_chat(profile: dict, key: str, body: dict, *, stream: bool) -> reques
 
 
 def _subscription_env(provider: str) -> dict:
-    config_dir = "/data/codex" if provider == "openai_subscription" else "/data/claude"
+    if provider != "openai_subscription":
+        raise LLMError("unsupported subscription provider")
+    config_dir = "/data/codex"
     os.makedirs(config_dir, mode=0o700, exist_ok=True)
     os.chmod(config_dir, 0o700)
     env = {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "HOME": "/data", "NO_COLOR": "1", "CI": "1",
     }
-    if provider == "openai_subscription":
-        env["CODEX_HOME"] = config_dir
-    else:
-        env["CLAUDE_CONFIG_DIR"] = config_dir
+    env["CODEX_HOME"] = config_dir
     return env
 
 
@@ -720,19 +673,13 @@ def _extract_codex_reply(stdout: str) -> str:
 
 def _subscription_chat(profile: dict, body: dict, *, stream: bool) -> requests.Response:
     provider = profile["provider"]
+    if provider != "openai_subscription":
+        raise LLMError("unsupported subscription provider")
     model = "" if profile.get("model") == "plan-default" else str(profile.get("model") or "")
-    if provider == "openai_subscription":
-        command = ["codex", "exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"]
-        if model:
-            command += ["--model", model]
-        command.append("-")
-    else:
-        command = [
-            "claude", "--print", "--output-format", "json", "--permission-mode", "manual",
-            "--disallowed-tools", "Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch",
-        ]
-        if model:
-            command += ["--model", model]
+    command = ["codex", "exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"]
+    if model:
+        command += ["--model", model]
+    command.append("-")
     try:
         result = subprocess.run(
             command, input=_subscription_prompt(body), text=True, capture_output=True,
@@ -740,18 +687,9 @@ def _subscription_chat(profile: dict, body: dict, *, stream: bool) -> requests.R
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise LLMError("the subscription CLI could not complete the request", status=502) from exc
-    if provider == "openai_subscription":
-        if result.returncode != 0:
-            raise LLMError("Codex CLI is not signed in or refused the request", status=502)
-        text = _extract_codex_reply(result.stdout)
-    else:
-        try:
-            payload = json.loads(result.stdout[result.stdout.index("{"):result.stdout.rindex("}") + 1])
-        except (ValueError, json.JSONDecodeError) as exc:
-            raise LLMError("Claude Code returned an unreadable response", status=502) from exc
-        if result.returncode != 0 or payload.get("is_error") is True:
-            raise LLMError("Claude Code is not signed in or refused the request", status=502)
-        text = str(payload.get("result", "")).strip()
+    if result.returncode != 0:
+        raise LLMError("Codex CLI is not signed in or refused the request", status=502)
+    text = _extract_codex_reply(result.stdout)
     message = {"content": text}
     if body.get("tools"):
         cleaned = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -771,7 +709,7 @@ def _subscription_chat(profile: dict, body: dict, *, stream: bool) -> requests.R
 
 def _chat(profile: dict, api_key: str, body: dict, *, stream: bool = False) -> requests.Response:
     wire = PROVIDER_MAP.get(profile.get("provider", ""), {}).get("wire", "openai")
-    if wire in {"codex", "claude"}:
+    if wire == "codex":
         return _subscription_chat(profile, body, stream=stream)
     if wire == "anthropic":
         return _anthropic_chat(profile, api_key, body, stream=stream)

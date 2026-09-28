@@ -20,6 +20,32 @@ jobs:
           cache: pip
       - run: pip install --requirement requirements.txt
       - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q cerberus
+      - run: sh -n scripts/*.sh
+      - name: Lint shell scripts
+        run: |
+          docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.11.0 \
+            /mnt/scripts/backup.sh \
+            /mnt/scripts/init-vault.sh \
+            /mnt/scripts/restore.sh \
+            /mnt/scripts/rollback-restore.sh \
+            /mnt/scripts/setup.sh \
+            /mnt/scripts/test-zap-image.sh \
+            /mnt/scripts/update.sh \
+            /mnt/packaging/aio/entrypoint.sh
+      - name: Scan the working tree for secrets
+        run: >-
+          docker run --rm -v "$PWD:/repo"
+          zricethezav/gitleaks:v8.30.1
+          dir /repo --no-banner --redact
+      - run: docker compose config -q
+      - run: docker compose -f packaging/aio/compose.yaml config -q
+
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12
 
   docker:
     runs-on: ubuntu-latest
@@ -29,5 +55,57 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
+          load: true
           push: false
           tags: cerberus-selfhost:ci
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.tools
+          load: true
+          push: false
+          tags: cerberus-tools:ci
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.aio
+          load: true
+          push: false
+          tags: cerberus-aio:ci
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.zap
+          load: true
+          push: false
+          tags: cerberus-zap:ci
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cerberus-selfhost:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cerberus-aio:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cerberus-tools:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cerberus-zap:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - name: Prove the ZAP worker
+        run: ./scripts/test-zap-image.sh cerberus-zap:ci cerberus-selfhost:ci

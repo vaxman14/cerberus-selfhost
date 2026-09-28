@@ -13,6 +13,8 @@ from pathlib import Path
 
 from .models import ScanResult
 
+SCHEMA_VERSION = 1
+
 
 def _supabase_cfg() -> tuple[str | None, str | None]:
     return os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SERVICE_KEY")
@@ -98,8 +100,17 @@ def _db() -> sqlite3.Connection:
           content TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          version INTEGER PRIMARY KEY,
+          applied_at TEXT NOT NULL
+        );
         """
     )
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (?,?)",
+        (SCHEMA_VERSION, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
     return conn
 
 
@@ -166,6 +177,29 @@ def delete_local_session(token_hash: str) -> None:
     with closing(_db()) as conn:
         with conn:
             conn.execute("DELETE FROM local_sessions WHERE token_hash=?", (token_hash,))
+
+
+def reset_local_user_password(username: str, password_hash: str) -> bool:
+    """Replace an owner's password and revoke every existing browser session."""
+    with closing(_db()) as conn:
+        with conn:
+            row = conn.execute(
+                "SELECT id FROM local_users WHERE username=? COLLATE NOCASE", (username,)
+            ).fetchone()
+            if not row:
+                return False
+            conn.execute(
+                "UPDATE local_users SET password_hash=? WHERE id=?",
+                (password_hash, row["id"]),
+            )
+            conn.execute("DELETE FROM local_sessions WHERE user_id=?", (row["id"],))
+    return True
+
+
+def schema_version() -> int:
+    with closing(_db()) as conn:
+        row = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
+    return int(row[0] or 0)
 
 
 def save_scan_analysis(scan_id: str, profile_id: str, content: str) -> dict:

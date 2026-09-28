@@ -1,150 +1,128 @@
 # Cerberus
 
-Cerberus is a free, self-hosted website security and quality scanner. Its
-Docker quick start runs passive checks against public website content:
+Cerberus is a free, self-hosted website security and quality scanner. Local
+users, scan history, reports, and encrypted model credentials stay on your
+Docker host.
 
-- **The Surface** checks HTTPS, security headers, cookie flags, exposed files,
-  source maps, and common client-side secret patterns.
-- **The Nose** checks public technology disclosures, SPF, DMARC,
-  `security.txt`, directory listings, and WordPress user exposure.
-- **The Health** runs Lighthouse locally in an isolated Chromium worker.
-- **The Hunt** runs explicitly authorized Nuclei, OWASP ZAP, and conservative
-  sqlmap checks from isolated containers.
+- **The Surface** — HTTPS, headers, cookies, exposed files, source maps, and
+  common client-side secret patterns.
+- **The Nose** — technology disclosures, SPF, DMARC, `security.txt`, directory
+  listings, and WordPress user exposure.
+- **The Health** — local Lighthouse in an isolated Chromium worker.
+- **The Hunt** — authorized Nuclei, OWASP ZAP, and conservative sqlmap checks.
 
-Results and history stay in a local SQLite database inside a Docker volume.
-There is no required cloud account, hosted database, analytics service, or
-external login provider.
-
-## Local users and AI analysis
-
-The web console is protected by a local owner account stored in SQLite with an
-Argon2id password hash. On an empty installation the first page creates that
-owner. For a non-interactive deployment, create
-`secrets/cerberus_bootstrap_password`, set the three documented bootstrap
-variables in `.env`, or run:
-
-```bash
-docker compose run --rm cerberus python -m cerberus.userctl create --username admin
-```
-
-`CERBERUS_API_KEY` remains optional for scripts; it is not the browser login.
-
-Cerberus can use a connected API provider, ChatGPT plan through the official
-Codex CLI, or Claude plan through Claude Code to explain and prioritize saved
-scanner findings. The model analyzes results; it does not replace or control
-the scanners.
-
-Generate the installation master key as a file, not an environment variable:
-
-```bash
-mkdir -p secrets
-openssl rand -base64 32 > secrets/cerberus_master_key
-chmod 600 secrets/cerberus_master_key
-./scripts/init-vault.sh
-```
-
-Back that file up separately from the database. A database backup without the
-original key deliberately cannot decrypt saved provider credentials. The script
-copies it through stdin into the external `cerberus-master-key` Docker volume;
-the application container remains non-root and the host copy remains mode 600.
-
-Generate the two internal service credentials too:
-
-```bash
-openssl rand -out secrets/cerberus_tools_token -hex 32
-openssl rand -out secrets/cerberus_zap_api_key -hex 32
-chmod 600 secrets/*
-```
-
-The tools worker and ZAP have no published ports. They use read-only root
-filesystems, dropped capabilities, `no-new-privileges`, resource ceilings, and
-a private runtime-secret volume. Host secret files remain mode 600.
-
-Provider keys are AES-256-GCM sealed in Cerberus's database with the
-installation master key kept outside the database; API responses expose only
-`has_api_key`. Requests to a remote model provider leave your machine and are
-governed by that provider's terms and privacy policy.
-
-Website, installation guide, and policies: <https://cerberusscan.com>
+Cerberus includes local owner authentication, per-site run history, stoppable
+jobs, PDF-ready client reports, and optional AI analysis through API providers
+or a ChatGPT plan using OpenAI's official Codex CLI.
 
 ## Quick start
 
-Requirements: Docker Engine with Docker Compose v2.
+Requires Docker Engine, Docker Compose v2, OpenSSL, and roughly 8 GB of free
+disk for images and working space.
 
 ```bash
 git clone https://github.com/vaxman14/cerberus-selfhost.git
 cd cerberus-selfhost
-cp .env.example .env
+./scripts/setup.sh
 ```
 
-Initialize the master-key volume and internal scanner credentials:
+Open <http://127.0.0.1:8099> and create the first local owner. Setup generates
+installation secrets, pulls release images, starts the stack, waits for health,
+and prints the URL.
+
+Safe defaults bind only to localhost, publish no scanner ports, require local
+login, and disable active Nuclei/ZAP/sqlmap scans. To enable active tools, set
+`CERBERUS_ENABLE_ACTIVE_SCANS=true` in `.env` and run
+`docker compose up -d`. Every active run still requires explicit authorization
+and production-risk confirmation.
+
+## Operations
 
 ```bash
-mkdir -p secrets
-openssl rand -base64 32 > secrets/cerberus_master_key
-openssl rand -out secrets/cerberus_tools_token -hex 32
-openssl rand -out secrets/cerberus_zap_api_key -hex 32
-chmod 600 secrets/*
-./scripts/init-vault.sh
-```
-
-Start Cerberus:
-
-```bash
-docker compose up -d --build
 docker compose ps
-```
-
-Open <http://127.0.0.1:8099> and create the first local owner account.
-
-To stop:
-
-```bash
+docker compose logs --tail=200 cerberus
+./scripts/backup.sh
+./scripts/restore.sh backups/cerberus-TIMESTAMP.tar.gz --confirm-replace
+./scripts/rollback-restore.sh .env.pre-restore-TIMESTAMP --confirm-rollback
+docker compose exec cerberus python -m cerberus.userctl reset-password --username admin
+./scripts/update.sh
 docker compose down
 ```
 
-`docker compose down` preserves scan history. Do not use `--volumes` unless
-you deliberately intend to remove saved data and runtime volumes.
+Back up `secrets/cerberus_master_key` **separately** from database archives. A
+database backup without the original key cannot decrypt saved provider
+credentials. `docker compose down --volumes` deliberately destroys local
+volumes; ordinary `docker compose down` preserves them.
 
-## Network access
+See [the operations guide](docs/HELP.md) for full recovery, reverse-proxy,
+configuration, and troubleshooting instructions.
 
-The default bind is localhost. For access from another device, put Cerberus
-behind an HTTPS reverse proxy, or set `CERBERUS_BIND` to a specific private
-interface address and protect it with a firewall. Do not expose plain HTTP and
-the API key directly to the public internet.
+## Resource expectations
 
-## Configuration
+- Images: `linux/amd64` and `linux/arm64`
+- Recommended host: 4 CPU cores, 8 GB RAM, and 8 GB free disk plus report growth
+- Lighthouse, Nuclei, and ZAP create short CPU/RAM spikes while scanning
+- One scan runs at a time because the shared ZAP worker is serialized
 
-| Variable | Required | Default | Purpose |
-|---|---:|---|---|
-| `CERBERUS_API_KEY` | no | empty | Optional script/API authentication |
-| `CERBERUS_BIND` | no | `127.0.0.1` | Host interface published by Compose |
-| `CERBERUS_PORT` | no | `8099` | Host port published by Compose |
-| `CERBERUS_ENABLE_ACTIVE_SCANS` | no | `true` | Makes the owner-confirmed active head available |
+## Unraid AIO
 
-SQLite is stored at `/data/cerberus.db` in the `cerberus-data` volume.
+The optional `romanvaxman/cerberus-aio:0.2.0` master image provides a
+single-container Community Apps entry while launching the isolated child
+stack. It requires `/var/run/docker.sock`, which grants effective control of
+the Docker host. The ordinary Compose install does not mount the socket and is
+safer when one-click Unraid installation is unnecessary. See
+[the Unraid notes](docs/UNRAID.md).
+
+## Security boundary
+
+The stack contains the app, a secret-initialization job, an isolated
+Lighthouse/Nuclei/sqlmap worker, and ZAP. Workers have no host ports, Docker
+socket, provider vault, or database access. Containers use read-only roots,
+dropped capabilities, `no-new-privileges`, tmpfs workspaces, resource ceilings,
+and authenticated private APIs.
+
+Owner passwords use Argon2id. Provider keys are AES-256-GCM sealed in SQLite
+with a master key outside the database. API responses never return secrets.
+Requests to a remote model provider leave your host under that provider's
+terms.
+
+Only scan targets you own or are authorized to assess. Active tools can create
+load or alter state; prefer staging.
+
+## Network and configuration
+
+The default bind is `127.0.0.1`. For remote access, use an HTTPS reverse proxy
+or a specific private interface plus firewall rules. Do not publish the default
+plain-HTTP port to the internet.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CERBERUS_BIND` | `127.0.0.1` | Published host interface |
+| `CERBERUS_PORT` | `8099` | Published host port |
+| `CERBERUS_ENABLE_ACTIVE_SCANS` | `false` | Enables the confirmed active head |
+| `CERBERUS_API_KEY` | empty | Optional script/API authentication |
+| `CERBERUS_DATA_VOLUME` | `cerberus-data` | Active database generation |
+| `CERBERUS_CODEX_VOLUME` | `cerberus-codex` | Dedicated Codex sign-in state |
+
+Release images are `romanvaxman/cerberus-selfhost:0.2.0`,
+`romanvaxman/cerberus-tools:0.2.0`, `romanvaxman/cerberus-zap:0.2.0`, and the
+optional `romanvaxman/cerberus-aio:0.2.0` launcher. Public installs pull images;
+development builds use `compose.dev.yaml`.
 
 ## API
 
+Set `CERBERUS_API_KEY`, then:
+
 ```bash
 curl -H "X-API-Key: $CERBERUS_API_KEY" http://127.0.0.1:8099/history
-
 curl -X POST http://127.0.0.1:8099/scan \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $CERBERUS_API_KEY" \
   -d '{"url":"https://example.com","heads":["frontend","nose","speed"]}'
 ```
 
-Poll the returned job at `GET /scan/<job_id>`. `GET /health` is public so
-Docker can monitor the container without embedding the API key in image
-metadata.
-
-## Safety boundary
-
-Only scan sites you own or are authorized to assess. Active testing requires a
-local owner, an explicit per-scan authorization confirmation, and a separate
-production-risk confirmation when the target is not a staging system. Nuclei,
-ZAP, and sqlmap can create load or alter state; use staging whenever possible.
+Poll `GET /scan/<job_id>`. Public `GET /health` reports app/schema versions
+without exposing credentials.
 
 ## Development
 
@@ -153,24 +131,21 @@ python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
 python -m unittest discover -s tests
+docker compose -f compose.yaml -f compose.dev.yaml build
 ```
 
-## Support the project
+## Support and policies
 
 Cerberus is free software. If it saves you time, you can
-[buy me a coffee](https://buymeacoffee.com/romanvaxman). Contributions do not
-purchase support, features, or an SLA.
+[feed Cerberus's dad a coffee](https://buymeacoffee.com/romanvaxman).
+Contributions do not purchase support, features, or an SLA.
 
-## Documentation and policies
-
-- [Help and operations guide](docs/HELP.md)
+- [Help and operations](docs/HELP.md)
 - [Privacy](PRIVACY.md)
-- [Terms of use](TERMS.md)
+- [Terms](TERMS.md)
 - [Security and authorization disclaimer](DISCLAIMER.md)
 - [Security policy](SECURITY.md)
 
-## License
-
 Copyright 2026 CTF Designs. Licensed under the GNU Affero General Public
-License v3.0. See the complete [LICENSE](LICENSE). The Cerberus and CTF
-Designs names and logos are not licensed for misleading endorsement.
+License v3.0. The Cerberus and CTF Designs names and logos are not licensed for
+misleading endorsement.

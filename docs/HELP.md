@@ -1,75 +1,116 @@
-# Cerberus Self-Hosted Help
-
-## Local scanner stack and AI analysis
-
-Cerberus runs Lighthouse, Nuclei, and sqlmap in the `cerberus-tools` worker and
-OWASP ZAP in its own container. Neither service publishes a host port. Create
-the installation master key and internal service credentials before starting:
-
-```bash
-mkdir -p secrets
-openssl rand -base64 32 > secrets/cerberus_master_key
-openssl rand -out secrets/cerberus_tools_token -hex 32
-openssl rand -out secrets/cerberus_zap_api_key -hex 32
-chmod 600 secrets/*
-./scripts/init-vault.sh
-docker compose up -d --build
-```
-
-Back up `secrets/cerberus_master_key` separately. The key is never stored in the
-database or image; losing it makes the encrypted provider credentials
-unrecoverable. The external key volume is not removed by
-`docker compose down --volumes`. Configure a model in **AI report analysis**,
-discover its model list, save it, and run the capability probes. Proven profiles
-can summarize a saved scan; they do not run the security tools. Use **Delete**
-beside a saved model profile to remove its local profile, sealed credential,
-bridge tokens, and analyses created with it. This does not delete the upstream
-provider account.
-
-While a scan is running, **Stop scan** cancels the active local scanner process
-or ZAP operation and discards partial results rather than saving an incomplete
-report.
-
-**Scan history** groups saved runs by site. Open an individual run to restore
-its findings and saved AI analysis in the console, or choose **Report** for the
-client-facing report. Use **Print / Save as PDF** in that report and choose the
-browser's PDF destination. The report also includes an optional support link.
+# Cerberus operations guide
 
 ## Install
 
 ```bash
 git clone https://github.com/vaxman14/cerberus-selfhost.git
 cd cerberus-selfhost
-cp .env.example .env
-# Create secrets as shown above; optionally set CERBERUS_API_KEY for scripts
-docker compose up -d --build
+./scripts/setup.sh
 ```
 
-Open <http://127.0.0.1:8099> on the Docker host. Keep the default localhost
-bind unless you place Cerberus behind a TLS reverse proxy and restrict access.
+Open the printed URL and create the first owner with a password of at least 12
+characters. For unattended setup, create
+`secrets/cerberus_bootstrap_password`, then set these in `.env`:
 
-## Check and troubleshoot
+```dotenv
+CERBERUS_BOOTSTRAP_USERNAME=admin
+CERBERUS_BOOTSTRAP_PASSWORD_FILE=/run/cerberus-secrets/bootstrap_password
+```
+
+Rerun setup and check the stack:
+
+```bash
+docker compose ps
+curl http://127.0.0.1:8099/health
+```
+
+## Safe exposure
+
+Cerberus binds to `127.0.0.1` by default. Use an HTTPS reverse proxy for remote
+access and forward the original scheme so secure session cookies work. You may
+instead bind to one private interface and enforce access with the host firewall.
+Never publish the tools worker or ZAP ports.
+
+## Scans, history, reports, and models
+
+Active scans are off by default and require target authorization when enabled.
+Only one scan runs globally so shared ZAP state cannot mix jobs. **Stop scan**
+cancels active tools and discards the partial report.
+
+History is grouped by site and run. **View run** restores findings and saved AI
+analysis. **Report** opens the client view; **Print / Save as PDF** uses the
+browser's PDF destination.
+
+AI analysis is optional. API credentials are encrypted with the installation
+master key. A ChatGPT plan can connect through the official Codex CLI in a
+dedicated volume. Models explain saved findings; they do not control scanners.
+Deleting a profile removes local credentials, tokens, and its saved analyses,
+not the upstream provider account.
+
+## Backup and restore
+
+```bash
+./scripts/backup.sh
+```
+
+Store the archive and `.sha256` receipt separately from
+`secrets/cerberus_master_key`. Restore with:
+
+```bash
+./scripts/restore.sh backups/cerberus-TIMESTAMP.tar.gz --confirm-replace
+```
+
+Restore validates the receipt, extracts into a fresh volume, runs SQLite and
+schema checks, verifies encrypted provider credentials using the separately
+held key, fences the writer, switches `.env`, recreates the app, and waits for
+health. The prior volume is preserved and a journal is written under
+`.cerberus-restore/`.
+
+Rollback using the environment file printed by restore:
+
+```bash
+./scripts/rollback-restore.sh .env.pre-restore-TIMESTAMP --confirm-rollback
+```
+
+Do not use `docker compose down --volumes` unless permanent deletion is the
+goal.
+
+## Password recovery
+
+```bash
+docker compose exec cerberus \
+  python -m cerberus.userctl reset-password --username admin
+```
+
+The prompt does not echo. Reset revokes all browser sessions. Automation can
+use a protected mounted file with `--password-file`.
+
+## Update
+
+Review release notes, then:
+
+```bash
+git pull --ff-only
+./scripts/update.sh
+```
+
+The script creates a verified backup, pulls release images, refreshes secrets
+and volume ownership, recreates changed services, and waits for health. Keep
+the backup and master key until accepting the new version.
+
+## Troubleshooting
 
 ```bash
 docker compose ps
 docker compose logs --tail=200 cerberus
+docker compose logs --tail=200 cerberus-tools
+docker compose logs --tail=200 zap
 curl http://127.0.0.1:8099/health
 ```
 
-If login fails, use the local owner created on first run. A first owner can also
-be created with `python -m cerberus.userctl create` inside the container. Never
-commit `.env` or `secrets/`. Scan history is in `/data/cerberus.db`.
+Setup is idempotent and preserves existing secrets. If restore fails after the
+writer is fenced, inspect its journal and use the preserved rollback state;
+do not delete candidate or previous volumes while investigating.
 
-## Update
-
-```bash
-git pull --ff-only
-docker compose up -d --build
-```
-
-Back up the Docker volume before upgrades. `docker compose down` preserves it;
-`docker compose down --volumes` intentionally destroys saved history.
-
-Only scan authorized targets. For more help, see
-<https://cerberusscan.com/help.html> or open a GitHub issue. Report security
-problems privately using [SECURITY.md](../SECURITY.md).
+Report security issues privately through [SECURITY.md](../SECURITY.md). Do not
+put credentials or private scan data in public issues.

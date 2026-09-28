@@ -1,0 +1,23 @@
+services:
+  cerberus:
+    build:
+      context: .
+      args:
+        CERBERUS_VERSION: 0.2.0-dev
+    image: cerberus-selfhost:dev
+
+  cerberus-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+      args:
+        CERBERUS_VERSION: 0.2.0-dev
+    image: cerberus-tools:dev
+
+  zap:
+    build:
+      context: .
+      dockerfile: Dockerfile.zap
+      args:
+        CERBERUS_VERSION: 0.2.0-dev
+    image: cerberus-zap:dev

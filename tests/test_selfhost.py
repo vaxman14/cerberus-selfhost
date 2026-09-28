@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cerberus import llm, local_auth, persistence, reporting, runner, tools_api, vault
+from cerberus import api, backupctl, llm, local_auth, persistence, reporting, runner, tools_api, vault
 from cerberus.cancellation import ScanCancelled
 from cerberus.auth_gate import AuthorizationError, AuthorizationGate
 from cerberus.heads import backend, nose
@@ -52,9 +52,51 @@ class SQLitePersistenceTests(unittest.TestCase):
                 self.assertEqual(bundle["findings"][0]["title"], "Missing header")
                 self.assertIsNone(bundle["analysis"])
                 self.assertIsNone(persistence.get_scan_bundle("missing"))
+                self.assertEqual(persistence.schema_version(), persistence.SCHEMA_VERSION)
+
+    def test_backup_round_trip_and_key_proof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.db"
+            destination = root / "restored.db"
+            archive = root / "backup.tar.gz"
+            key_file = root / "master_key"
+            key_file.write_text(base64.b64encode(b"k" * 32).decode(), encoding="utf-8")
+            key_file.chmod(0o600)
+            with patch.dict(os.environ, {
+                "CERBERUS_DB_PATH": str(source),
+                "CERBERUS_MASTER_KEY_FILE": str(key_file),
+                "SUPABASE_URL": "", "SUPABASE_SERVICE_KEY": "",
+            }, clear=False):
+                owner = local_auth.create_owner("owner", "a sufficiently long password")
+                result = ScanResult(target="https://example.com", client=owner["username"])
+                persistence.save(result, log="verified")
+                with archive.open("wb") as output:
+                    backupctl.export_archive(output)
+
+            manifest = backupctl.verify_archive(archive)
+            self.assertEqual(manifest["format"], "cerberus-backup-v1")
+            backupctl.restore_archive(archive, destination)
+            proof = backupctl.prove_database(destination, key_file)
+            self.assertEqual(proof["users"], 1)
+            self.assertEqual(proof["scans"], 1)
+            self.assertEqual(proof["schema_version"], persistence.SCHEMA_VERSION)
 
 
 class ActiveScanGateTests(unittest.TestCase):
+    def test_only_one_scan_can_hold_the_shared_scanner_stack(self):
+        with api.LOCK:
+            old = dict(api.JOBS)
+            api.JOBS.clear()
+            api.JOBS["running-job"] = {"status": "running"}
+            try:
+                self.assertEqual(api._active_job_id(), "running-job")
+                api.JOBS["running-job"]["status"] = "done"
+                self.assertIsNone(api._active_job_id())
+            finally:
+                api.JOBS.clear()
+                api.JOBS.update(old)
+
     def test_unverified_authorization_is_blocked_by_default(self):
         auth = AuthRecord(
             client="selfhost",
@@ -181,6 +223,16 @@ class LocalAuthTests(unittest.TestCase):
             self.assertTrue(local_auth.csrf_valid(authed, csrf))
             self.assertFalse(local_auth.csrf_valid(authed, "wrong"))
 
+            local_auth.reset_password("owner", "a different long password")
+            self.assertIsNone(local_auth.authenticate(
+                f"{local_auth.COOKIE_NAME}={token}")[0])
+            with self.assertRaises(local_auth.LocalAuthError):
+                local_auth.login("owner", "a sufficiently long password")
+            self.assertEqual(
+                local_auth.login("owner", "a different long password")[0]["username"],
+                "owner",
+            )
+
     def test_second_owner_setup_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
             "CERBERUS_DB_PATH": str(Path(tmp) / "cerberus.db"),
@@ -218,16 +270,16 @@ class CredentialVaultTests(unittest.TestCase):
 class LLMProfileTests(unittest.TestCase):
     def test_full_josi_picker_catalog_includes_api_and_subscription_paths(self):
         providers = {item["kind"]: item for item in llm.provider_catalog()}
-        self.assertEqual(len(providers), 20)
+        self.assertEqual(len(providers), 19)
         for required in (
             "openai_compatible", "openai", "anthropic", "xai", "gemini", "deepseek",
             "qwen", "mistral", "moonshot", "zhipu", "cohere", "openrouter", "minimax",
             "baidu", "hunyuan", "azure_openai", "aws_bedrock", "vertex_ai",
-            "openai_subscription", "anthropic_subscription",
+            "openai_subscription",
         ):
             self.assertIn(required, providers)
         self.assertEqual(providers["openai_subscription"]["wire"], "codex")
-        self.assertEqual(providers["anthropic_subscription"]["wire"], "claude")
+        self.assertNotIn("anthropic_subscription", providers)
 
     def test_gemini_discovery_uses_native_header_and_filters_non_generate_models(self):
         response = unittest.mock.MagicMock()

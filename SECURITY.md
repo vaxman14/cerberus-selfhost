@@ -2,7 +2,8 @@
 
 ## Supported version
 
-Only the current `main` branch is supported before the first tagged release.
+The latest `0.2.x` release and current `main` branch receive security fixes.
+Older releases are unsupported.
 
 ## Reporting a vulnerability
 

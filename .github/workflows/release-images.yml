@@ -1,0 +1,65 @@
+name: Release images
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: cerberus-selfhost
+            dockerfile: Dockerfile
+          - name: cerberus-tools
+            dockerfile: Dockerfile.tools
+          - name: cerberus-aio
+            dockerfile: Dockerfile.aio
+          - name: cerberus-zap
+            dockerfile: Dockerfile.zap
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
+          build-args: |
+            CERBERUS_VERSION=${{ steps.meta.outputs.version }}
+            CERBERUS_REVISION=${{ github.sha }}
+            CERBERUS_CREATED=${{ steps.meta.outputs.created }}
+          provenance: mode=max
+          sbom: true
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body_path: CHANGELOG.md

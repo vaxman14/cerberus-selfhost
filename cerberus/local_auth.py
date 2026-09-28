@@ -60,6 +60,13 @@ def create_owner(username: str, password: str) -> dict:
         raise LocalAuthError("that username already exists", status=409) from exc
 
 
+def reset_password(username: str, password: str) -> None:
+    username = _validate_username(username)
+    password_hash = PASSWORD_HASHER.hash(_validate_password(password))
+    if not persistence.reset_local_user_password(username, password_hash):
+        raise LocalAuthError("no such local user", status=404)
+
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 

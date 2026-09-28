@@ -1,18 +1,43 @@
-FROM projectdiscovery/nuclei:v3.11.1@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb AS nuclei
+FROM golang:1.26.6-alpine@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83 AS nuclei
+ARG CERBERUS_NUCLEI_COMMIT=a8c88feb4a1c8e961b7902534ce3af97e9d524a4
+RUN apk add --no-cache git \
+    && git clone --filter=blob:none https://github.com/projectdiscovery/nuclei.git /src/nuclei \
+    && git -C /src/nuclei checkout "${CERBERUS_NUCLEI_COMMIT}" \
+    && cd /src/nuclei \
+    && go get github.com/go-git/go-git/v5@v5.19.2 \
+        golang.org/x/crypto@v0.55.0 \
+        golang.org/x/mod@v0.40.0 \
+        google.golang.org/grpc@v1.83.2 \
+    && go mod tidy \
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /usr/local/bin/nuclei ./cmd/nuclei \
+    && /usr/local/bin/nuclei -version
 
-FROM alpine/git:2.49.1 AS sqlmap
+FROM alpine/git:2.49.1@sha256:c0280cf9572316299b08544065d3bf35db65043d5e3963982ec50647d2746e26 AS sqlmap
 ARG CERBERUS_SQLMAP_COMMIT=3cfba468d79ab0a88c9d6c79e572cabdfd77d219
 RUN git clone --filter=blob:none https://github.com/sqlmapproject/sqlmap.git /src/sqlmap \
     && git -C /src/sqlmap checkout "${CERBERUS_SQLMAP_COMMIT}" \
     && rm -rf /src/sqlmap/.git
 
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
 ARG CERBERUS_LIGHTHOUSE_VERSION=13.5.0
+ARG CERBERUS_VERSION=0.2.0
+ARG CERBERUS_REVISION=unknown
+ARG CERBERUS_CREATED=unknown
+
+LABEL org.opencontainers.image.title="Cerberus scanner tools" \
+      org.opencontainers.image.description="Isolated Lighthouse, Nuclei, and sqlmap worker for Cerberus" \
+      org.opencontainers.image.source="https://github.com/vaxman14/cerberus-selfhost" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.version="${CERBERUS_VERSION}" \
+      org.opencontainers.image.revision="${CERBERUS_REVISION}" \
+      org.opencontainers.image.created="${CERBERUS_CREATED}"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates chromium python3 \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g --ignore-scripts "lighthouse@${CERBERUS_LIGHTHOUSE_VERSION}" \
+    && rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
     && groupadd --system --gid 10001 cerberus-tools \
     && useradd --system --uid 10001 --gid cerberus-tools --home-dir /tmp cerberus-tools
 
