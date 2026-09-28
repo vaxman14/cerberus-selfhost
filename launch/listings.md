@@ -18,9 +18,9 @@ land on `main`.
 
 **Images:**
 
-- `romanvaxman/cerberus-selfhost:0.2.0`
-- `romanvaxman/cerberus-tools:0.2.0`
-- `romanvaxman/cerberus-aio:0.2.0` (Unraid convenience launcher; Docker socket required)
+- `romanvaxman/cerberus-selfhost:0.2.1`
+- `romanvaxman/cerberus-tools:0.2.1`
+- `romanvaxman/cerberus-aio:0.2.1` (Unraid convenience launcher; Docker socket required)
 
 ## Community posts
 

@@ -4,13 +4,13 @@
 
 **Name:** Cerberus
 
-**Tagline:** Four-headed website security scanner you host yourself
+**Tagline:** Self-hosted website security with Lighthouse, ZAP & Nuclei
 
 **Description (under 260 characters):**
 
-Run passive checks, local Lighthouse, Nuclei, OWASP ZAP, and sqlmap from one
-self-hosted app. Cerberus keeps users, history, reports, and encrypted model
-credentials on your Docker host. Free and AGPL licensed.
+Cerberus combines passive checks, local Lighthouse, and authorized Nuclei,
+OWASP ZAP, and sqlmap scans in one free Docker app. Keep users, history,
+reports, and encrypted AI provider credentials on your own hardware.
 
 **Topics:** Open Source, Security, Developer Tools, Self-Hosted
 
