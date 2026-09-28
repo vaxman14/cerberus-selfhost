@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 from . import llm, local_auth, runner, reporting, persistence, tool_client, vault
 from .models import ScanResult, Finding, Head, Severity
+from .cancellation import ScanCancelled
 
 API_KEY = os.environ.get("CERBERUS_API_KEY", "")
 SUPA_URL = os.environ.get("SUPABASE_URL", "")
@@ -20,6 +21,7 @@ AUTH_MODE = os.environ.get(
 ADMIN_EMAIL = os.environ.get("CERBERUS_ADMIN_EMAIL", "").lower()
 CONSOLE_PATH = Path(__file__).resolve().parent.parent / "console" / "index.html"
 JOBS: dict[str, dict] = {}
+CANCEL_EVENTS: dict[str, threading.Event] = {}
 LOCK = threading.Lock()
 LOGIN_FAILURES: dict[str, list[float]] = {}
 
@@ -40,6 +42,8 @@ def _run_job(job_id: str, params: dict) -> None:
             allow_prod=bool(params.get("allow_prod", False)),
             admin_override=bool(params.get("admin_override", False)),
             log_cb=log_cb,
+            cancel_event=CANCEL_EVENTS.get(job_id),
+            run_id=job_id,
         )
         with LOCK:
             entry = JOBS.get(job_id, {})
@@ -52,6 +56,14 @@ def _run_job(job_id: str, params: dict) -> None:
             "skipped": skipped, "scan_id": scan_id,
             "report_html": reporting.render_client(result), "log": log, "user": owner,
         }
+    except ScanCancelled:
+        with LOCK:
+            entry = JOBS.get(job_id, {})
+            log = entry.get("log", [])
+            owner = entry.get("user")
+        if not log or log[-1] != "!! STOPPED by operator":
+            log.append("!! STOPPED by operator")
+        payload = {"status": "stopped", "log": log, "user": owner}
     except Exception as e:  # noqa: BLE001
         with LOCK:
             entry = JOBS.get(job_id, {})
@@ -61,6 +73,7 @@ def _run_job(job_id: str, params: dict) -> None:
         payload = {"status": "error", "error": str(e)[:300], "log": log, "user": owner}
     with LOCK:
         JOBS[job_id] = payload
+        CANCEL_EVENTS.pop(job_id, None)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -389,6 +402,7 @@ class Handler(BaseHTTPRequestHandler):
             jid = uuid.uuid4().hex[:12]
             with LOCK:
                 JOBS[jid] = {"status": "running", "log": [], "user": user["id"]}
+                CANCEL_EVENTS[jid] = threading.Event()
             threading.Thread(target=_run_job, args=(jid, params), daemon=True).start()
             return self._send(202, {"job_id": jid, "status": "running"})
 
@@ -401,6 +415,29 @@ class Handler(BaseHTTPRequestHandler):
         if not self._csrf_ok(user):
             return self._send(403, {"error": "invalid CSRF token; sign in again"})
         path = urlparse(self.path).path
+        if path.startswith("/scan/"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 2:
+                jid = parts[1]
+                with LOCK:
+                    job = JOBS.get(jid)
+                    event = CANCEL_EVENTS.get(jid)
+                    if not job:
+                        status, error = 404, "no such job"
+                    elif job.get("user") and job.get("user") != user["id"]:
+                        status, error = 403, "not your scan"
+                    elif job.get("status") not in {"running", "stopping"} or event is None:
+                        status, error = 409, "scan is not running"
+                    else:
+                        status, error = 202, ""
+                        event.set()
+                        job["status"] = "stopping"
+                        job.setdefault("log", []).append(
+                            "!! Stop requested; cancelling active tools …")
+                if error:
+                    return self._send(status, {"error": error})
+                tool_client.cancel(jid)
+                return self._send(202, {"status": "stopping"})
         if path.startswith("/ai-lab/providers/"):
             parts = path.strip("/").split("/")
             if len(parts) == 3:

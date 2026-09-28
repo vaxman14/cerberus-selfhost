@@ -6,6 +6,7 @@ from .governor import SafetyGovernor
 from .auth_gate import AuthorizationGate, AuthorizationError
 from .heads import frontend, speed, backend, nose
 from . import persistence
+from .cancellation import check
 
 
 _HEAD_LABEL = {"frontend": "The Surface (exposure)",
@@ -17,7 +18,7 @@ _HEAD_LABEL = {"frontend": "The Surface (exposure)",
 def run_scan(url: str, client: str = "prospect",
              heads=("frontend", "speed"), auth_ref: str | None = None,
              staging: bool = False, allow_prod: bool = False, log_cb=None,
-             admin_override: bool = False):
+             admin_override: bool = False, cancel_event=None, run_id: str = ""):
     """Full pipeline: build auth + scope, run each authorized head through the
     governor, persist (with the full log transcript), and return
     (result, scan_id, skipped_messages). log_cb(line) streams live progress."""
@@ -48,6 +49,7 @@ def run_scan(url: str, client: str = "prospect",
     log("")
 
     for name in heads:
+        check(cancel_event)
         head = Head(name)
         label = _HEAD_LABEL.get(name, name)
         log(f">> {label}")
@@ -64,13 +66,18 @@ def run_scan(url: str, client: str = "prospect",
         elif head is Head.NOSE:
             result.findings += nose.scan(url, gov, log=log)
         elif head is Head.SPEED:
-            result.findings += speed.scan(url, log=log)
+            result.findings += speed.scan(
+                url, log=log, cancel_event=cancel_event, run_id=run_id)
         elif head is Head.BACKEND:
-            result.findings += backend.scan(url, auth, staging=staging, log=log)
+            result.findings += backend.scan(
+                url, auth, staging=staging, log=log,
+                cancel_event=cancel_event, run_id=run_id)
+        check(cancel_event)
         found = len(result.findings) - before
         log(f"   done — {found} finding(s)")
         log("")
 
+    check(cancel_event)
     log(f"== scan complete: {len(result.findings)} finding(s), worst = {result.worst().value}")
     log("   saving to database...")
     scan_id = persistence.save(result, log="\n".join(logs), authorization_id=auth_ref)

@@ -4,6 +4,7 @@ import ipaddress
 import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import threading
@@ -14,6 +15,8 @@ from pathlib import Path
 
 TOKEN_FILE = os.environ.get("CERBERUS_TOOLS_TOKEN_FILE", "/run/cerberus-tools/token")
 RUN_LOCK = threading.Lock()
+RUNNING_LOCK = threading.Lock()
+RUNNING: dict[str, subprocess.Popen] = {}
 SEVERITY = {"informational": "info", "info": "info", "low": "low",
             "medium": "medium", "high": "high", "critical": "critical"}
 
@@ -41,21 +44,74 @@ def _validate_url(value: object) -> str:
     return url
 
 
-def _run(command: list[str], *, timeout: int) -> subprocess.CompletedProcess:
+def _run(command: list[str], *, timeout: int, run_id: str = "") -> subprocess.CompletedProcess:
     with RUN_LOCK:
-        return subprocess.run(
-            command, text=True, capture_output=True, timeout=timeout, check=False,
+        process = subprocess.Popen(
+            command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True,
             env={"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
                  "HOME": "/tmp", "NO_COLOR": "1", "CHROME_PATH": "/usr/bin/chromium"},
         )
+        if run_id:
+            with RUNNING_LOCK:
+                RUNNING[run_id] = process
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _terminate(process)
+            process.communicate()
+            raise
+        finally:
+            if run_id:
+                with RUNNING_LOCK:
+                    RUNNING.pop(run_id, None)
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
-def lighthouse(url: str) -> dict:
+def _terminate(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        _terminate_lighthouse_children()
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=3)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    finally:
+        _terminate_lighthouse_children()
+
+
+def _terminate_lighthouse_children() -> None:
+    """Lighthouse may detach Chromium from the Node process group; reap it."""
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            command = (proc / "cmdline").read_bytes().replace(b"\0", b" ")
+            if b"/tmp/lighthouse." in command:
+                os.kill(int(proc.name), signal.SIGKILL)
+        except (OSError, ValueError):
+            continue
+
+
+def cancel(run_id: str) -> bool:
+    with RUNNING_LOCK:
+        process = RUNNING.get(run_id)
+    if process is None:
+        return False
+    _terminate(process)
+    return True
+
+
+def lighthouse(url: str, run_id: str = "") -> dict:
     result = _run([
         "lighthouse", url, "--quiet", "--output=json", "--output-path=stdout",
         "--only-categories=performance,best-practices",
         "--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu",
-    ], timeout=180)
+    ], timeout=180, run_id=run_id)
     if result.returncode != 0:
         raise RuntimeError("Lighthouse failed to complete")
     try:
@@ -69,13 +125,13 @@ def lighthouse(url: str) -> dict:
     }}
 
 
-def nuclei(url: str) -> dict:
+def nuclei(url: str, run_id: str = "") -> dict:
     result = _run([
         "nuclei", "-u", url, "-jsonl", "-silent", "-duc", "-ni",
         "-t", "/opt/nuclei-templates", "-severity", "low,medium,high,critical",
         "-tags", "misconfig,exposure,cve,default-login,tech",
         "-timeout", "5", "-retries", "1", "-rl", "75", "-c", "15",
-    ], timeout=660)
+    ], timeout=660, run_id=run_id)
     findings = []
     for line in result.stdout.splitlines():
         try:
@@ -93,12 +149,12 @@ def nuclei(url: str) -> dict:
     return {"findings": findings, "completed": result.returncode in {0, 1}}
 
 
-def sqlmap(url: str) -> dict:
+def sqlmap(url: str, run_id: str = "") -> dict:
     result = _run([
         "python3", "/opt/sqlmap/sqlmap.py", "-u", url, "--batch", "--smart",
         "--level=1", "--risk=1", "--technique=BEUS", "--flush-session",
         "--disable-coloring", "--output-dir=/tmp/sqlmap-output",
-    ], timeout=900)
+    ], timeout=900, run_id=run_id)
     output = f"{result.stdout}\n{result.stderr}"
     vulnerable = bool(re.search(r"is vulnerable|injectable", output, re.I))
     return {"vulnerable": vulnerable, "completed": result.returncode in {0, 1}}
@@ -133,14 +189,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(413, {"error": "request too large"})
         try:
             params = json.loads(self.rfile.read(length) or b"{}")
-            url = _validate_url(params.get("url"))
             action = self.path.strip("/")
+            run_id = str(params.get("run_id", ""))
+            if run_id and not re.fullmatch(r"[0-9a-f]{12}", run_id):
+                raise ValueError("invalid run id")
+            if action == "cancel":
+                return self._send(200, {"cancelled": cancel(run_id)})
+            url = _validate_url(params.get("url"))
             if action == "lighthouse":
-                result = lighthouse(url)
+                result = lighthouse(url, run_id)
             elif action == "nuclei":
-                result = nuclei(url)
+                result = nuclei(url, run_id)
             elif action == "sqlmap":
-                result = sqlmap(url)
+                result = sqlmap(url, run_id)
             else:
                 return self._send(404, {"error": "not found"})
             return self._send(200, result)

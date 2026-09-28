@@ -21,7 +21,14 @@ database or image; losing it makes the encrypted provider credentials
 unrecoverable. The external key volume is not removed by
 `docker compose down --volumes`. Configure a model in **AI report analysis**,
 discover its model list, save it, and run the capability probes. Proven profiles
-can summarize a saved scan; they do not run the security tools.
+can summarize a saved scan; they do not run the security tools. Use **Delete**
+beside a saved model profile to remove its local profile, sealed credential,
+bridge tokens, and analyses created with it. This does not delete the upstream
+provider account.
+
+While a scan is running, **Stop scan** cancels the active local scanner process
+or ZAP operation and discards partial results rather than saving an incomplete
+report.
 
 ## Install
 

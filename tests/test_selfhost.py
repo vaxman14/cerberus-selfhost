@@ -2,11 +2,13 @@ import os
 import base64
 import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cerberus import llm, local_auth, persistence, reporting, vault
+from cerberus import llm, local_auth, persistence, reporting, runner, vault
+from cerberus.cancellation import ScanCancelled
 from cerberus.auth_gate import AuthorizationError, AuthorizationGate
 from cerberus.models import AuthRecord, Finding, Head, ScanResult, Severity
 
@@ -57,6 +59,13 @@ class ActiveScanGateTests(unittest.TestCase):
         }, clear=False):
             with self.assertRaises(AuthorizationError):
                 AuthorizationGate(auth).authorize(Head.BACKEND)
+
+    def test_stopped_scan_does_not_run_or_persist(self):
+        stopped = threading.Event()
+        stopped.set()
+        with self.assertRaises(ScanCancelled):
+            runner.run_scan(
+                "https://example.com", heads=("frontend",), cancel_event=stopped)
 
 
 class ReportSupportLinkTests(unittest.TestCase):
@@ -274,6 +283,33 @@ class LLMProfileTests(unittest.TestCase):
                     conn.commit()
                 self.assertNotEqual(stored, token)
                 self.assertIsNone(llm.authenticate_bridge(f"Bearer {token}"))
+
+    def test_deleting_profile_removes_sealed_key_and_bridge_tokens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key_path = CredentialVaultTests()._key_file(tmp, b"g" * 32)
+            db_path = str(Path(tmp) / "cerberus.db")
+            with patch.dict(os.environ, {
+                "CERBERUS_DB_PATH": db_path,
+                "CERBERUS_MASTER_KEY_FILE": key_path,
+                "CERBERUS_MASTER_KEY": "",
+                "CREDENTIALS_KEY": "",
+            }, clear=False), patch(
+                "socket.getaddrinfo",
+                return_value=[(2, 1, 6, "", ("127.0.0.1", 11434))],
+            ):
+                profile = llm.save_profile({
+                    "provider": "openai_compatible", "model": "local-test",
+                    "base_url": "http://model.internal:11434/v1",
+                    "api_key": "delete-me",
+                })
+                persistence.issue_llm_bridge_token(profile["id"])
+                self.assertTrue(persistence.delete_llm_profile(profile["id"]))
+                self.assertIsNone(persistence.get_llm_profile(profile["id"]))
+                with sqlite3.connect(db_path) as conn:
+                    self.assertEqual(
+                        conn.execute("SELECT COUNT(*) FROM llm_bridge_tokens").fetchone()[0], 0
+                    )
+                self.assertFalse(persistence.delete_llm_profile(profile["id"]))
 
     def test_transient_discovery_returns_models_without_storing_the_key(self):
         response = unittest.mock.MagicMock()

@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 from ..models import Finding, Severity, Head, AuthRecord
 from .. import tool_client
+from ..cancellation import check, ScanCancelled
 from . import _steps
 
 TOOL_TIMEOUT = 900  # 15 min per tool
@@ -32,7 +33,8 @@ def _map_sev(s: str) -> Severity:
             "high": Severity.HIGH, "critical": Severity.CRITICAL}.get(s, Severity.INFO)
 
 
-def scan(url: str, auth: AuthRecord, staging: bool = False, log=None) -> list[Finding]:
+def scan(url: str, auth: AuthRecord, staging: bool = False, log=None,
+         cancel_event=None, run_id: str = "") -> list[Finding]:
     """Head 2: active backend attack orchestration (nuclei / ZAP / sqlmap).
     Caller MUST have passed AuthorizationGate first. Refuses production targets
     unless auth.allow_production_active is set."""
@@ -42,19 +44,23 @@ def scan(url: str, auth: AuthRecord, staging: bool = False, log=None) -> list[Fi
                         "Target is production and allow_production_active is not set. "
                         "Point at a staging clone or explicitly acknowledge prod risk.")]
     out: list[Finding] = []
+    check(cancel_event)
     _steps.say(log, "arming active toolchain (this bites — can take minutes) …")
     _steps.say(log, "nuclei · templated CVE / misconfig sweep …")
-    _steps.step(log, out, "nuclei", lambda: out.extend(_nuclei(url)))
+    _steps.step(log, out, "nuclei", lambda: out.extend(_nuclei(url, run_id)))
+    check(cancel_event)
     _steps.say(log, "OWASP ZAP · active injection scan …")
-    _steps.step(log, out, "OWASP ZAP", lambda: out.extend(_zap(url)))
+    _steps.step(log, out, "OWASP ZAP", lambda: out.extend(_zap(url, cancel_event)))
+    check(cancel_event)
     _steps.say(log, "sqlmap · SQL-injection probe …")
-    _steps.step(log, out, "sqlmap", lambda: out.extend(_sqlmap(url)))
+    _steps.step(log, out, "sqlmap", lambda: out.extend(_sqlmap(url, run_id)))
+    check(cancel_event)
     return out
 
 
-def _nuclei(url: str) -> list[Finding]:
+def _nuclei(url: str, run_id: str = "") -> list[Finding]:
     try:
-        payload = tool_client.run("nuclei", url, timeout=680)
+        payload = tool_client.run("nuclei", url, timeout=680, run_id=run_id)
     except tool_client.ToolServiceError as exc:
         return [Finding(Head.BACKEND, "Nuclei unavailable", Severity.INFO, str(exc))]
     return [Finding(
@@ -65,7 +71,7 @@ def _nuclei(url: str) -> list[Finding]:
     ) for item in payload.get("findings", [])]
 
 
-def _zap(url: str) -> list[Finding]:
+def _zap(url: str, cancel_event=None) -> list[Finding]:
     base = os.environ.get("ZAP_API", "http://localhost:8080")
     key = os.environ.get("ZAP_API_KEY", "")
     key_file = os.environ.get("ZAP_API_KEY_FILE", "")
@@ -94,16 +100,24 @@ def _zap(url: str) -> list[Finding]:
         sid = str(api("spider/action/scan", url=url).get("scan", "0"))
         dl = time.time() + 120
         while time.time() < dl:
+            if cancel_event is not None and cancel_event.is_set():
+                api("spider/action/stop", scanId=sid)
+                raise ScanCancelled("scan stopped by operator")
             if api("spider/view/status", scanId=sid).get("status") == "100":
                 break
             time.sleep(3)
         asid = str(api("ascan/action/scan", url=url, recurse="true").get("scan", "0"))
         dl = time.time() + 360
         while time.time() < dl:
+            if cancel_event is not None and cancel_event.is_set():
+                api("ascan/action/stop", scanId=asid)
+                raise ScanCancelled("scan stopped by operator")
             if api("ascan/view/status", scanId=asid).get("status") == "100":
                 break
             time.sleep(5)
         alerts = api("core/view/alerts", baseurl=url).get("alerts", [])
+    except ScanCancelled:
+        raise
     except Exception as e:
         return [Finding(Head.BACKEND, "ZAP scan error", Severity.INFO, str(e)[:200])]
     return [Finding(Head.BACKEND, f"ZAP: {a.get('alert', '')}", _map_sev(a.get("risk", "")),
@@ -111,9 +125,9 @@ def _zap(url: str) -> list[Finding]:
                     remediation=(a.get("solution", "") or "")[:300]) for a in alerts]
 
 
-def _sqlmap(url: str) -> list[Finding]:
+def _sqlmap(url: str, run_id: str = "") -> list[Finding]:
     try:
-        payload = tool_client.run("sqlmap", url, timeout=TOOL_TIMEOUT + 30)
+        payload = tool_client.run("sqlmap", url, timeout=TOOL_TIMEOUT + 30, run_id=run_id)
     except tool_client.ToolServiceError as exc:
         return [Finding(Head.BACKEND, "sqlmap unavailable", Severity.INFO, str(exc))]
     if payload.get("vulnerable"):

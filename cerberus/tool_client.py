@@ -50,7 +50,16 @@ def status() -> dict:
         return {"ok": False, "error": str(exc)}
 
 
-def run(tool: str, url: str, *, timeout: int = 930) -> dict:
+def run(tool: str, url: str, *, timeout: int = 930, run_id: str = "") -> dict:
     if tool not in {"lighthouse", "nuclei", "sqlmap"}:
         raise ToolServiceError("unsupported local tool")
-    return request(tool, {"url": url}, timeout=timeout)
+    return request(tool, {"url": url, "run_id": run_id}, timeout=timeout)
+
+
+def cancel(run_id: str) -> bool:
+    if not run_id:
+        return False
+    try:
+        return bool(request("cancel", {"run_id": run_id}, timeout=4).get("cancelled"))
+    except ToolServiceError:
+        return False
