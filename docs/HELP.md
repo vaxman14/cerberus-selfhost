@@ -30,6 +30,11 @@ While a scan is running, **Stop scan** cancels the active local scanner process
 or ZAP operation and discards partial results rather than saving an incomplete
 report.
 
+**Scan history** groups saved runs by site. Open an individual run to restore
+its findings and saved AI analysis in the console, or choose **Report** for the
+client-facing report. Use **Print / Save as PDF** in that report and choose the
+browser's PDF destination. The report also includes an optional support link.
+
 ## Install
 
 ```bash

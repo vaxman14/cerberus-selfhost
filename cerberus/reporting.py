@@ -103,6 +103,9 @@ def render_client(result: ScanResult) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>
   body{{margin:0;background:#f4f5f7;color:#1c2128;font:15px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}}
+  .toolbar{{max-width:760px;margin:16px auto;display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 12px;box-sizing:border-box}}
+  .toolbar span{{margin-right:auto;color:#57606a;font-size:13px}} .toolbar button,.toolbar a{{border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}}
+  .toolbar button{{background:#e5484d;color:#fff}} .toolbar a{{background:#ffdd00;color:#111}}
   .wrap{{max-width:760px;margin:0 auto;background:#fff}}
   .top{{background:#0b0d10;color:#fff;padding:26px 34px;display:flex;justify-content:space-between;align-items:center}}
   .brand{{font-size:22px;font-weight:800;letter-spacing:.5px}} .brand b{{color:#e5484d}}
@@ -128,7 +131,9 @@ def render_client(result: ScanResult) -> str:
   .cta a{{display:inline-block;background:#e5484d;color:#fff;text-decoration:none;font-weight:700;border-radius:8px;padding:11px 22px}}
   .cta a.coffee{{background:#ffdd00;color:#111;margin-left:8px}}
   .foot{{text-align:center;color:#8b97a3;font-size:11.5px;padding:18px}}
+  @media print{{body{{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}}.toolbar{{display:none}}.wrap{{max-width:none}}}}
 </style></head><body>
+<div class="toolbar"><span>Cerberus is free. If it helped, feed its dad.</span><button type="button" onclick="window.print()">Print / Save as PDF</button><a href="{SUPPORT_URL}" target="_blank" rel="noopener noreferrer">☕ Support Roman</a></div>
 <div class="wrap">
   <div class="top"><div class="brand">Cerber<b>us</b><small>Web-security scan · by CTF Designs</small></div>
     <div class="date">Security Snapshot<br>{when}</div></div>
@@ -143,7 +148,7 @@ def render_client(result: ScanResult) -> str:
     <div class="cta"><h3>Want these handled?</h3>
       <p>CTF Designs builds and hardens sites for a living. We can fix what's here — or go deeper.</p>
       <a href="{BOOK_URL}">Book a call →</a>
-      <a class="coffee" href="{SUPPORT_URL}">☕ Buy me a coffee</a></div>
+      <a class="coffee" href="{SUPPORT_URL}">☕ Feed Cerberus’s dad</a></div>
   </div>
   <div class="foot">Automated scan — a snapshot, not a guarantee of security. &nbsp;·&nbsp; Cerberus by CTF Designs &nbsp;·&nbsp; {when}</div>
 </div>

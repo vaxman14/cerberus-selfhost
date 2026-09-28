@@ -350,6 +350,24 @@ def get_findings(scan_id: str) -> list:
         return [dict(row) for row in rows]
 
 
+def get_scan_bundle(scan_id: str) -> dict | None:
+    """Return one saved run with its findings and optional persisted analysis."""
+    scan = get_scan(scan_id)
+    if not scan:
+        return None
+    findings = get_findings(scan_id)
+    return {
+        "scan_id": scan_id,
+        "created_at": scan.get("created_at"),
+        "client": scan.get("client", ""),
+        "target": scan.get("target", ""),
+        "worst": scan.get("worst_severity", "info"),
+        "count": scan.get("finding_count", len(findings)),
+        "findings": findings,
+        "analysis": get_scan_analysis(scan_id),
+    }
+
+
 def save_agreement(client: str, filename: str, file_b64: str,
                    scope_hosts=None) -> str | None:
     """Store an uploaded authorization when Supabase is configured."""

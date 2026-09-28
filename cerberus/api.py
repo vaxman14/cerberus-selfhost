@@ -223,6 +223,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/history":
             scans = persistence.list_scans(client=None, limit=100)
             return self._send(200, {"scans": scans})
+        if path.startswith("/history/"):
+            sid = path.split("/history/", 1)[1]
+            value = persistence.get_scan_bundle(sid)
+            return self._send(200, value) if value else self._send(
+                404, {"error": "no such saved run"})
         if path == "/capabilities":
             return self._send(200, {
                 "active_scans": os.environ.get(

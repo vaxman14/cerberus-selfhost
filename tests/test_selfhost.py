@@ -44,6 +44,13 @@ class SQLitePersistenceTests(unittest.TestCase):
                                  "https://example.com")
                 self.assertEqual(persistence.list_scans()[0]["id"], scan_id)
                 self.assertEqual(persistence.get_findings(scan_id)[0]["severity"], "low")
+                bundle = persistence.get_scan_bundle(scan_id)
+                self.assertEqual(bundle["scan_id"], scan_id)
+                self.assertEqual(bundle["target"], "https://example.com")
+                self.assertEqual(bundle["count"], 1)
+                self.assertEqual(bundle["findings"][0]["title"], "Missing header")
+                self.assertIsNone(bundle["analysis"])
+                self.assertIsNone(persistence.get_scan_bundle("missing"))
 
 
 class ActiveScanGateTests(unittest.TestCase):
@@ -73,6 +80,8 @@ class ReportSupportLinkTests(unittest.TestCase):
         report = reporting.render_client(
             ScanResult(target="https://example.com", client="selfhost"))
         self.assertIn("https://buymeacoffee.com/romanvaxman", report)
+        self.assertIn("Print / Save as PDF", report)
+        self.assertIn("window.print()", report)
 
 
 class LocalAuthTests(unittest.TestCase):
