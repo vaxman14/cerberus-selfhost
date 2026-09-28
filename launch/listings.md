@@ -12,6 +12,10 @@ users, run history, PDF-ready reports, and optional AI analysis.
 Run `./scripts/setup.sh`, create a local owner, and keep scan history on your
 Docker host. Multi-architecture images support amd64 and arm64.
 
+The public descriptions are maintained in `docs/dockerhub/` and synchronized
+to Docker Hub by `.github/workflows/dockerhub-description.yml` after changes
+land on `main`.
+
 **Images:**
 
 - `romanvaxman/cerberus-selfhost:0.2.0`
