@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM --platform=$BUILDPLATFORM gradle:8.13-jdk17-alpine@sha256:849f12df262884668387cf463f02e104394fde950689cc9f644764cde22a2c13 AS network-builder
+FROM --platform=$BUILDPLATFORM gradle:9.7-jdk17-alpine@sha256:ea0fa71de5a6f963a8fa1ec8560fffc589655f0c91b0d644af1cffcb92260dc7 AS network-builder
 
 ARG CERBERUS_ZAP_NETWORK_COMMIT=d7e0725adb263b5cd4d34bc6dd395004ec865360
 
