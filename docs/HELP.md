@@ -2,6 +2,9 @@
 
 ## Install
 
+See the [complete installation guide](INSTALL.md) for requirements, remote-host
+access, the optional Docker Hub AIO method, and removal semantics.
+
 ```bash
 git clone https://github.com/vaxman14/cerberus-selfhost.git
 cd cerberus-selfhost

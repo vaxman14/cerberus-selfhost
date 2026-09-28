@@ -74,6 +74,8 @@ Images support `linux/amd64` and `linux/arm64`.
 
 ## Links
 
+- [Step-by-step installation guide](https://cerberusscan.com/install)
+- [Help and operations](https://cerberusscan.com/help)
 - [Source and complete documentation](https://github.com/vaxman14/cerberus-selfhost)
 - [Release v0.2.0](https://github.com/vaxman14/cerberus-selfhost/releases/tag/v0.2.0)
 - [Help and operations](https://github.com/vaxman14/cerberus-selfhost/blob/main/docs/HELP.md)

@@ -17,6 +17,9 @@ or a ChatGPT plan using OpenAI's official Codex CLI.
 
 ## Quick start
 
+For both the recommended Compose setup and the optional Docker Hub AIO method,
+read the [complete installation guide](docs/INSTALL.md).
+
 Requires Docker Engine, Docker Compose v2, OpenSSL, and roughly 8 GB of free
 disk for images and working space.
 
@@ -54,7 +57,8 @@ database backup without the original key cannot decrypt saved provider
 credentials. `docker compose down --volumes` deliberately destroys local
 volumes; ordinary `docker compose down` preserves them.
 
-See [the operations guide](docs/HELP.md) for full recovery, reverse-proxy,
+See the [public installation page](https://cerberusscan.com/install) and
+[operations guide](docs/HELP.md) for full recovery, reverse-proxy,
 configuration, and troubleshooting instructions.
 
 ## Resource expectations
@@ -141,6 +145,9 @@ Cerberus is free software. If it saves you time, you can
 Contributions do not purchase support, features, or an SLA.
 
 - [Help and operations](docs/HELP.md)
+- [Installation guide](docs/INSTALL.md)
+- [Public Help](https://cerberusscan.com/help)
+- [Public installation instructions](https://cerberusscan.com/install)
 - [Privacy](PRIVACY.md)
 - [Terms](TERMS.md)
 - [Security and authorization disclaimer](DISCLAIMER.md)

@@ -66,6 +66,8 @@ you own or are authorized to assess.
 
 ## Links
 
+- [Step-by-step installation guide](https://cerberusscan.com/install)
+- [Help and operations](https://cerberusscan.com/help)
 - [Source and complete documentation](https://github.com/vaxman14/cerberus-selfhost)
 - [AIO security and operations notes](https://github.com/vaxman14/cerberus-selfhost/blob/main/docs/UNRAID.md)
 - [Release v0.2.0](https://github.com/vaxman14/cerberus-selfhost/releases/tag/v0.2.0)
