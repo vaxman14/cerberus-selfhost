@@ -1,4 +1,27 @@
 services:
+  secret-init:
+    image: alpine:3.22
+    restart: "no"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./secrets:/source:ro
+      - cerberus-runtime-secrets:/target
+    command:
+      - sh
+      - -c
+      - >-
+        install -g 4242 -m 0440 /source/cerberus_tools_token /target/tools_token &&
+        install -g 4242 -m 0440 /source/cerberus_zap_api_key /target/zap_api_key &&
+        if [ -f /source/cerberus_bootstrap_password ]; then
+          install -g 4242 -m 0440 /source/cerberus_bootstrap_password /target/bootstrap_password;
+        else
+          rm -f /target/bootstrap_password;
+        fi
+
   cerberus:
     build:
       context: .
@@ -6,21 +29,100 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     environment:
-      CERBERUS_API_KEY: ${CERBERUS_API_KEY:?Set CERBERUS_API_KEY in .env}
-      CERBERUS_AUTH_MODE: apikey
+      CERBERUS_API_KEY: ${CERBERUS_API_KEY:-}
+      CERBERUS_AUTH_MODE: local
       CERBERUS_DB_PATH: /data/cerberus.db
-      PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+      CERBERUS_MASTER_KEY_FILE: /run/cerberus-vault/master_key
+      CERBERUS_TOOLS_URL: http://cerberus-tools:8181
+      CERBERUS_TOOLS_TOKEN_FILE: /run/cerberus-secrets/tools_token
+      CERBERUS_LIGHTHOUSE_MODE: local
+      CERBERUS_ENABLE_ACTIVE_SCANS: ${CERBERUS_ENABLE_ACTIVE_SCANS:-true}
+      ZAP_API: http://zap:8080
+      ZAP_API_KEY_FILE: /run/cerberus-secrets/zap_api_key
+      CERBERUS_BOOTSTRAP_USERNAME: ${CERBERUS_BOOTSTRAP_USERNAME:-}
+      CERBERUS_BOOTSTRAP_PASSWORD_FILE: ${CERBERUS_BOOTSTRAP_PASSWORD_FILE:-}
     ports:
       - "${CERBERUS_BIND:-127.0.0.1}:${CERBERUS_PORT:-8099}:8099"
     volumes:
       - cerberus-data:/data
+      - cerberus-master-key:/run/cerberus-vault:ro
+      - cerberus-runtime-secrets:/run/cerberus-secrets:ro
+    group_add: ["4242"]
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
+    depends_on:
+      secret-init:
+        condition: service_completed_successfully
+      cerberus-tools:
+        condition: service_healthy
+      zap:
+        condition: service_healthy
+
+  cerberus-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    image: cerberus-tools:latest
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      CERBERUS_TOOLS_TOKEN_FILE: /run/cerberus-secrets/tools_token
+    volumes:
+      - cerberus-runtime-secrets:/run/cerberus-secrets:ro
+    group_add: ["4242"]
+    tmpfs:
+      - /tmp:rw,nosuid,size=1g
+    mem_limit: 2g
+    cpus: 2.0
+    depends_on:
+      secret-init:
+        condition: service_completed_successfully
+
+  zap:
+    image: zaproxy/zap-bare@sha256:fe8fa5157a9601b2db26531340717923bda544f2f2081ec3edc779baed7321eb
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - cerberus-runtime-secrets:/run/cerberus-secrets:ro
+    group_add: ["4242"]
+    tmpfs:
+      - /tmp:rw,nosuid,mode=1777,size=256m
+      - /zap/wrk:rw,nosuid,uid=1000,gid=1000,size=512m
+      - /home/zap/.ZAP:rw,nosuid,uid=1000,gid=1000,size=512m
+    command:
+      - sh
+      - -c
+      - >-
+        printf '%s\n' '-Xmx1536m' > /home/zap/.ZAP/.ZAP_JVM.properties &&
+        exec zap.sh -daemon -silent -host 0.0.0.0 -port 8080
+        -config api.disablekey=false
+        -config api.key="$$(cat /run/cerberus-secrets/zap_api_key)"
+        -config api.addrs.addr.name=.*
+        -config api.addrs.addr.regex=true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- 'http://127.0.0.1:8080/JSON/core/view/version/?apikey='\"$$(cat /run/cerberus-secrets/zap_api_key)\" >/dev/null"]
+      interval: 20s
+      timeout: 8s
+      start_period: 30s
+      retries: 6
+    mem_limit: 2g
+    cpus: 2.0
+    depends_on:
+      secret-init:
+        condition: service_completed_successfully
 
 volumes:
   cerberus-data:
+  cerberus-runtime-secrets:
+  cerberus-master-key:
+    external: true
+    name: ${CERBERUS_MASTER_KEY_VOLUME:-cerberus-master-key}

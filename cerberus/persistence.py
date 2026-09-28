@@ -75,9 +75,124 @@ def _db() -> sqlite3.Connection:
           created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_llm_bridge_expiry ON llm_bridge_tokens(expires_at);
+        CREATE TABLE IF NOT EXISTS local_users (
+          id TEXT PRIMARY KEY,
+          username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'owner',
+          created_at TEXT NOT NULL,
+          last_login_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS local_sessions (
+          token_hash TEXT PRIMARY KEY,
+          csrf_hash TEXT NOT NULL,
+          user_id TEXT NOT NULL REFERENCES local_users(id) ON DELETE CASCADE,
+          expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_local_sessions_expiry
+          ON local_sessions(expires_at);
+        CREATE TABLE IF NOT EXISTS scan_analyses (
+          scan_id TEXT PRIMARY KEY REFERENCES scans(id) ON DELETE CASCADE,
+          profile_id TEXT NOT NULL REFERENCES llm_profiles(id) ON DELETE CASCADE,
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
         """
     )
     return conn
+
+
+def local_user_count() -> int:
+    with closing(_db()) as conn:
+        return int(conn.execute("SELECT COUNT(*) FROM local_users").fetchone()[0])
+
+
+def create_local_user(username: str, password_hash: str, *, role: str = "owner") -> dict:
+    user_id = uuid.uuid4().hex
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(_db()) as conn:
+        with conn:
+            conn.execute(
+                "INSERT INTO local_users(id,username,password_hash,role,created_at) "
+                "VALUES (?,?,?,?,?)",
+                (user_id, username, password_hash, role, now),
+            )
+    return {"id": user_id, "username": username, "role": role, "created_at": now}
+
+
+def get_local_user_by_username(username: str) -> dict | None:
+    with closing(_db()) as conn:
+        row = conn.execute(
+            "SELECT id,username,password_hash,role,created_at,last_login_at "
+            "FROM local_users WHERE username=? COLLATE NOCASE",
+            (username,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def create_local_session(user_id: str, token_hash: str, csrf_hash: str, *, hours: int = 24) -> None:
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(hours=max(1, min(hours, 168)))
+    with closing(_db()) as conn:
+        with conn:
+            conn.execute("DELETE FROM local_sessions WHERE expires_at<=?", (now.isoformat(),))
+            conn.execute(
+                "INSERT INTO local_sessions(token_hash,csrf_hash,user_id,expires_at,created_at) "
+                "VALUES (?,?,?,?,?)",
+                (token_hash, csrf_hash, user_id, expires.isoformat(), now.isoformat()),
+            )
+            conn.execute(
+                "UPDATE local_users SET last_login_at=? WHERE id=?",
+                (now.isoformat(), user_id),
+            )
+
+
+def get_local_session(token_hash: str) -> dict | None:
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(_db()) as conn:
+        row = conn.execute(
+            """
+            SELECT u.id,u.username,u.role,s.csrf_hash,s.expires_at
+            FROM local_sessions s JOIN local_users u ON u.id=s.user_id
+            WHERE s.token_hash=? AND s.expires_at>?
+            """,
+            (token_hash, now),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_local_session(token_hash: str) -> None:
+    with closing(_db()) as conn:
+        with conn:
+            conn.execute("DELETE FROM local_sessions WHERE token_hash=?", (token_hash,))
+
+
+def save_scan_analysis(scan_id: str, profile_id: str, content: str) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(_db()) as conn:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO scan_analyses(scan_id,profile_id,content,created_at)
+                VALUES (?,?,?,?)
+                ON CONFLICT(scan_id) DO UPDATE SET
+                  profile_id=excluded.profile_id,content=excluded.content,
+                  created_at=excluded.created_at
+                """,
+                (scan_id, profile_id, content, now),
+            )
+    return {"scan_id": scan_id, "profile_id": profile_id,
+            "content": content, "created_at": now}
+
+
+def get_scan_analysis(scan_id: str) -> dict | None:
+    with closing(_db()) as conn:
+        row = conn.execute(
+            "SELECT scan_id,profile_id,content,created_at FROM scan_analyses WHERE scan_id=?",
+            (scan_id,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def _post(path: str, payload) -> list | None:

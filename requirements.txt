@@ -1,2 +1,3 @@
 requests>=2.31
 cryptography>=43,<51
+argon2-cffi>=23.1,<26

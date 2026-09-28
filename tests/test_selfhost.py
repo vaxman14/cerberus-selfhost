@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cerberus import ai_lab, llm, persistence, reporting, vault
+from cerberus import llm, local_auth, persistence, reporting, vault
 from cerberus.auth_gate import AuthorizationError, AuthorizationGate
 from cerberus.models import AuthRecord, Finding, Head, ScanResult, Severity
 
@@ -66,36 +66,31 @@ class ReportSupportLinkTests(unittest.TestCase):
         self.assertIn("https://buymeacoffee.com/romanvaxman", report)
 
 
-class AILabStatusTests(unittest.TestCase):
-    def test_disabled_lab_does_not_probe_or_disclose_credentials(self):
-        with patch.dict(os.environ, {
-            "CERBERUS_AI_LAB_ENABLED": "false",
-            "CERBERUS_AI_USERNAME": "operator",
-            "CERBERUS_AI_PASSWORD": "do-not-return",
+class LocalAuthTests(unittest.TestCase):
+    def test_first_owner_login_session_and_csrf(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+            "CERBERUS_DB_PATH": str(Path(tmp) / "cerberus.db"),
+            "SUPABASE_URL": "", "SUPABASE_SERVICE_KEY": "",
         }, clear=False):
-            value = ai_lab.status()
-        self.assertEqual(value["engine"], "Xalgorix")
-        self.assertFalse(value["configured"])
-        self.assertFalse(value["reachable"])
-        self.assertNotIn("username", value)
-        self.assertNotIn("password", value)
+            self.assertTrue(local_auth.setup_required())
+            owner = local_auth.create_owner("owner", "a sufficiently long password")
+            self.assertEqual(owner["role"], "owner")
+            self.assertFalse(local_auth.setup_required())
+            user, token, csrf = local_auth.login(
+                "OWNER", "a sufficiently long password")
+            authed, _ = local_auth.authenticate(
+                f"{local_auth.COOKIE_NAME}={token}; {local_auth.CSRF_COOKIE_NAME}={csrf}")
+            self.assertEqual(authed["id"], user["id"])
+            self.assertTrue(local_auth.csrf_valid(authed, csrf))
+            self.assertFalse(local_auth.csrf_valid(authed, "wrong"))
 
-    def test_enabled_lab_reports_redacted_reachability(self):
-        response = unittest.mock.MagicMock()
-        response.__enter__.return_value = response
-        response.__exit__.return_value = False
-        response.read.return_value = b'{"auth_required":true}'
-        with patch.dict(os.environ, {
-            "CERBERUS_AI_LAB_ENABLED": "true",
-            "CERBERUS_AI_URL": "http://cerberus-ai:9137",
-            "CERBERUS_AI_USERNAME": "operator",
-            "CERBERUS_AI_PASSWORD": "secret",
-        }, clear=False), patch("urllib.request.urlopen", return_value=response):
-            value = ai_lab.status()
-        self.assertTrue(value["configured"])
-        self.assertTrue(value["reachable"])
-        self.assertEqual(value["state"], "ready")
-        self.assertNotIn("url", value)
+    def test_second_owner_setup_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+            "CERBERUS_DB_PATH": str(Path(tmp) / "cerberus.db"),
+        }, clear=False):
+            local_auth.create_owner("owner", "a sufficiently long password")
+            with self.assertRaises(local_auth.LocalAuthError):
+                local_auth.create_owner("other", "another sufficiently long password")
 
 
 class CredentialVaultTests(unittest.TestCase):

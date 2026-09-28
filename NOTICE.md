@@ -1,6 +1,6 @@
 # Reused security design
 
-Cerberus AI Lab's model-provider catalogue, endpoint-discovery rules,
+Cerberus's model-provider catalogue, endpoint-discovery rules,
 capability-probe contract, master-key handling, and AES-256-GCM sealing format
 are adapted from Josi CE's `packages/llm` and `packages/core` implementation.
 Josi CE identifies SOCAL RECEPTIONIST LLC as publisher and is licensed

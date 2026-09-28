@@ -7,26 +7,32 @@ Docker quick start runs passive checks against public website content:
   source maps, and common client-side secret patterns.
 - **The Nose** checks public technology disclosures, SPF, DMARC,
   `security.txt`, directory listings, and WordPress user exposure.
-- **The Health** requests Google PageSpeed/Lighthouse performance and
-  best-practices results.
+- **The Health** runs Lighthouse locally in an isolated Chromium worker.
+- **The Hunt** runs explicitly authorized Nuclei, OWASP ZAP, and conservative
+  sqlmap checks from isolated containers.
 
 Results and history stay in a local SQLite database inside a Docker volume.
 There is no required cloud account, hosted database, analytics service, or
 external login provider.
 
-## Optional AI Lab
+## Local users and AI analysis
 
-Cerberus AI Lab adds repo-assisted autonomous security testing for apps you
-own. It uses the maintained Apache-2.0 [Xalgorix](https://github.com/xalgorix/xalgorix)
-engine for BYO-LLM orchestration, source review, disposable local provisioning,
-browser-assisted DAST, evidence validation, and PDF reports.
-
-Generate a separate AI Lab password and put it after
-`CERBERUS_AI_PASSWORD=` in `.env`:
+The web console is protected by a local owner account stored in SQLite with an
+Argon2id password hash. On an empty installation the first page creates that
+owner. For a non-interactive deployment, create
+`secrets/cerberus_bootstrap_password`, set the three documented bootstrap
+variables in `.env`, or run:
 
 ```bash
-openssl rand -hex 24
+docker compose run --rm cerberus python -m cerberus.userctl create --username admin
 ```
+
+`CERBERUS_API_KEY` remains optional for scripts; it is not the browser login.
+
+Cerberus can use a connected API provider, ChatGPT plan through the official
+Codex CLI, or Claude plan through Claude Code to explain and prioritize saved
+scanner findings. The model analyzes results; it does not replace or control
+the scanners.
 
 Generate the installation master key as a file, not an environment variable:
 
@@ -42,31 +48,21 @@ original key deliberately cannot decrypt saved provider credentials. The script
 copies it through stdin into the external `cerberus-master-key` Docker volume;
 the application container remains non-root and the host copy remains mode 600.
 
-Then start both services:
+Generate the two internal service credentials too:
 
 ```bash
-docker compose -f compose.yaml -f compose.ai-lab.yaml up -d
+openssl rand -out secrets/cerberus_tools_token -hex 32
+openssl rand -out secrets/cerberus_zap_api_key -hex 32
+chmod 600 secrets/*
 ```
 
-Open Cerberus, configure a provider in the **AI Lab** card, discover the models
-that credential may actually use, save it encrypted, and run the capability
-probe. Only profiles proven to support chat, structured output, tool calls, and
-useful context can start a scan. Attach a Git URL and choose **Provision +
-DAST** to build and test a disposable copy. **Review** performs source-only
-analysis. The separate Xalgorix dashboard remains available through **Open AI
-Lab** for scan progress and reports.
-
-The shipped overlay grants no host-Docker access or privileged mode. It drops
-Linux capabilities except `NET_RAW`, enables `no-new-privileges`, sets resource
-ceilings and conservative rate limits, and publishes only to localhost by
-default. Low-level tools requiring broader kernel privileges may be unavailable;
-web-application testing is the intended use.
+The tools worker and ZAP have no published ports. They use read-only root
+filesystems, dropped capabilities, `no-new-privileges`, resource ceilings, and
+a private runtime-secret volume. Host secret files remain mode 600.
 
 Provider keys are AES-256-GCM sealed in Cerberus's database with the
-installation master key mounted from `/run/secrets`; API responses expose only
-`has_api_key`. Xalgorix receives a random, expiring, profile-scoped internal
-bridge token whose hash is stored locally, never the real provider key.
-Requests to a remote model provider leave your machine and are
+installation master key kept outside the database; API responses expose only
+`has_api_key`. Requests to a remote model provider leave your machine and are
 governed by that provider's terms and privacy policy.
 
 Website, installation guide, and policies: <https://cerberusscan.com>
@@ -81,10 +77,15 @@ cd cerberus-selfhost
 cp .env.example .env
 ```
 
-Generate the API key and put the output after `CERBERUS_API_KEY=` in `.env`:
+Initialize the master-key volume and internal scanner credentials:
 
 ```bash
-openssl rand -hex 32
+mkdir -p secrets
+openssl rand -base64 32 > secrets/cerberus_master_key
+openssl rand -out secrets/cerberus_tools_token -hex 32
+openssl rand -out secrets/cerberus_zap_api_key -hex 32
+chmod 600 secrets/*
+./scripts/init-vault.sh
 ```
 
 Start Cerberus:
@@ -94,8 +95,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Open <http://127.0.0.1:8099> and enter the same API key. The browser keeps it
-in the current tab's session storage, not permanent browser storage.
+Open <http://127.0.0.1:8099> and create the first local owner account.
 
 To stop:
 
@@ -103,8 +103,8 @@ To stop:
 docker compose down
 ```
 
-`docker compose down` preserves scan history. To intentionally remove the
-named data volume too, use `docker compose down --volumes`.
+`docker compose down` preserves scan history. Do not use `--volumes` unless
+you deliberately intend to remove saved data and runtime volumes.
 
 ## Network access
 
@@ -117,10 +117,10 @@ the API key directly to the public internet.
 
 | Variable | Required | Default | Purpose |
 |---|---:|---|---|
-| `CERBERUS_API_KEY` | yes | — | Protects the console and API |
+| `CERBERUS_API_KEY` | no | empty | Optional script/API authentication |
 | `CERBERUS_BIND` | no | `127.0.0.1` | Host interface published by Compose |
 | `CERBERUS_PORT` | no | `8099` | Host port published by Compose |
-| `PAGESPEED_API_KEY` | no | empty | Optional Google PageSpeed quota |
+| `CERBERUS_ENABLE_ACTIVE_SCANS` | no | `true` | Makes the owner-confirmed active head available |
 
 SQLite is stored at `/data/cerberus.db` in the `cerberus-data` volume.
 
@@ -141,15 +141,10 @@ metadata.
 
 ## Safety boundary
 
-Only scan sites you own or are authorized to assess. The standard Docker image
-does not expose Cerberus's active testing head and does not install Nuclei,
-OWASP ZAP, or sqlmap. Active testing has materially different legal and
-operational risk; it is intentionally outside the one-command self-hosted
-quick start.
-
-AI Lab is also limited to applications you own or are explicitly authorized to
-test. Use synthetic data and sanitized configuration. Never upload production
-secrets, customer databases, or credentials to a scan workspace.
+Only scan sites you own or are authorized to assess. Active testing requires a
+local owner, an explicit per-scan authorization confirmation, and a separate
+production-risk confirmation when the target is not a staging system. Nuclei,
+ZAP, and sqlmap can create load or alter state; use staging whenever possible.
 
 ## Development
 

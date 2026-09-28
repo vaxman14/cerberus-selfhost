@@ -7,21 +7,17 @@ API keys, or scan history to CTF Designs. Target URLs, findings, and timestamps
 are stored in `/data/cerberus.db` inside the Docker volume controlled by the
 operator.
 
-The app contacts websites selected by the operator and may contact Google
-PageSpeed Insights when that check is enabled. GitHub or a container registry
-processes requests when source code or images are downloaded. Those services
-apply their own policies.
+The app and its isolated scanner containers contact websites selected by the
+operator. Lighthouse runs locally; no Google PageSpeed API is required.
 
-Operators control local retention and are responsible for protecting the API
-key, Docker host, backups, reverse proxy, and network access. CTF Designs does
+Operators control local retention and are responsible for protecting local
+accounts, optional API keys, the Docker host, backups, and network access. CTF Designs does
 not sell personal information or local scan data.
 
-The optional AI Lab stores provider profiles in the Cerberus data volume and
-stores source uploads, scan events, and reports in a separate AI Lab volume.
-Provider credentials are encrypted with an installation key kept outside the
-database. When an operator configures a remote LLM, prompts and relevant scan
-context are sent to that provider and its privacy policy applies. A local model
-can avoid that external transmission. CTF Designs does not receive or operate
-those provider accounts.
+Optional provider profiles and generated analyses are stored in the Cerberus
+data volume. Provider credentials are encrypted with an installation key kept
+outside the database. When an operator uses a remote LLM, the target and scanner
+findings are sent to that provider and its privacy policy applies. A local model
+can avoid that transmission. CTF Designs does not receive those accounts.
 
 The complete current policy is at <https://cerberusscan.com/privacy.html>.

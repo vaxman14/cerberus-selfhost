@@ -6,7 +6,9 @@ import shutil
 import subprocess
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from ..models import Finding, Severity, Head, AuthRecord
+from .. import tool_client
 from . import _steps
 
 TOOL_TIMEOUT = 900  # 15 min per tool
@@ -51,41 +53,28 @@ def scan(url: str, auth: AuthRecord, staging: bool = False, log=None) -> list[Fi
 
 
 def _nuclei(url: str) -> list[Finding]:
-    if not _have("nuclei"):
-        return [_missing("nuclei")]
-    # Scope to the categories that matter for a client audit instead of the full
-    # template library (which is too heavy for a 1-vCPU runner against an SPA).
-    cmd = ["nuclei", "-u", url, "-jsonl", "-silent",
-           "-severity", "low,medium,high,critical",
-           "-tags", "misconfig,exposure,cve,default-login,tech",
-           "-ni", "-timeout", "5", "-retries", "1", "-rl", "150", "-c", "25"]
-    stdout = ""
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        stdout = p.stdout
-    except subprocess.TimeoutExpired as e:
-        # Keep whatever nuclei streamed before the cap instead of throwing it away.
-        raw = e.stdout
-        stdout = (raw.decode() if isinstance(raw, bytes) else raw) or ""
-    out: list[Finding] = []
-    for line in stdout.splitlines():
-        try:
-            j = json.loads(line)
-        except ValueError:
-            continue
-        info = j.get("info", {})
-        out.append(Finding(
-            Head.BACKEND, f"nuclei: {info.get('name', j.get('template-id', ''))}",
-            _map_sev(info.get("severity", "info")),
-            (info.get("description") or j.get("template-id", ""))[:400],
-            evidence=str(j.get("matched-at", ""))[:120],
-            remediation=(info.get("remediation") or "")[:300]))
-    return out
+        payload = tool_client.run("nuclei", url, timeout=680)
+    except tool_client.ToolServiceError as exc:
+        return [Finding(Head.BACKEND, "Nuclei unavailable", Severity.INFO, str(exc))]
+    return [Finding(
+        Head.BACKEND, str(item.get("title", "Nuclei finding"))[:200],
+        _map_sev(str(item.get("severity", "info"))), str(item.get("detail", ""))[:400],
+        evidence=str(item.get("evidence", ""))[:160],
+        remediation=str(item.get("remediation", ""))[:400],
+    ) for item in payload.get("findings", [])]
 
 
 def _zap(url: str) -> list[Finding]:
     base = os.environ.get("ZAP_API", "http://localhost:8080")
     key = os.environ.get("ZAP_API_KEY", "")
+    key_file = os.environ.get("ZAP_API_KEY_FILE", "")
+    if key_file:
+        try:
+            key = Path(key_file).read_text(encoding="utf-8").strip()
+        except OSError:
+            return [Finding(Head.BACKEND, "ZAP credential unavailable", Severity.INFO,
+                            "The configured ZAP API-key file could not be read.")]
 
     def api(path, **params):
         params["apikey"] = key
@@ -123,17 +112,11 @@ def _zap(url: str) -> list[Finding]:
 
 
 def _sqlmap(url: str) -> list[Finding]:
-    if not _have("sqlmap"):
-        return [_missing("sqlmap")]
     try:
-        p = subprocess.run(
-            ["sqlmap", "-u", url, "--batch", "--smart", "--level=1", "--risk=1",
-             "--technique=BEUS", "--flush-session", "--disable-coloring"],
-            capture_output=True, text=True, timeout=TOOL_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        return [Finding(Head.BACKEND, "sqlmap timed out", Severity.INFO, "Exceeded 15m.")]
-    txt = (p.stdout or "") + (p.stderr or "")
-    if "is vulnerable" in txt or "injectable" in txt.lower():
+        payload = tool_client.run("sqlmap", url, timeout=TOOL_TIMEOUT + 30)
+    except tool_client.ToolServiceError as exc:
+        return [Finding(Head.BACKEND, "sqlmap unavailable", Severity.INFO, str(exc))]
+    if payload.get("vulnerable"):
         return [Finding(Head.BACKEND, "SQL injection detected", Severity.CRITICAL,
                         "sqlmap flagged an injectable parameter (detect-only, no data dumped).",
                         evidence="see sqlmap session log",

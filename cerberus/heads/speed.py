@@ -4,6 +4,7 @@ import json
 import urllib.parse
 import urllib.request
 from ..models import Finding, Severity, Head
+from .. import tool_client
 from . import _steps
 
 PSI = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
@@ -14,20 +15,24 @@ def scan(url: str, log=None) -> list[Finding]:
     Low scores double as redesign/rebuild leads."""
     log = log or (lambda *_: None)
     _steps.say(log, "requesting Lighthouse report (Google, can take ~20s) …")
-    key = os.environ.get("PAGESPEED_API_KEY")
-    q = (f"{PSI}?url={urllib.parse.quote(url, safe='')}"
-         "&strategy=mobile&category=performance&category=best-practices")
-    if key:
-        q += f"&key={key}"
     out: list[Finding] = []
     try:
-        with urllib.request.urlopen(q, timeout=90) as r:
-            data = json.load(r)
-        cats = data["lighthouseResult"]["categories"]
+        mode = os.environ.get("CERBERUS_LIGHTHOUSE_MODE", "local").strip().lower()
+        if mode == "pagespeed":
+            key = os.environ.get("PAGESPEED_API_KEY")
+            q = (f"{PSI}?url={urllib.parse.quote(url, safe='')}"
+                 "&strategy=mobile&category=performance&category=best-practices")
+            if key:
+                q += f"&key={key}"
+            with urllib.request.urlopen(q, timeout=90) as r:
+                data = json.load(r)
+        else:
+            data = tool_client.run("lighthouse", url, timeout=200)
+        cats = data["categories"] if "categories" in data else data["lighthouseResult"]["categories"]
     except Exception as e:
         log(_steps._fmt("Lighthouse report", "skip"))
         return [Finding(Head.SPEED, "Speed scan unavailable", Severity.INFO,
-                        f"PageSpeed call failed ({e}). Set PAGESPEED_API_KEY for quota.")]
+                        f"Local Lighthouse failed ({e}). Check the Cerberus tools service.")]
 
     def _add(cat, label):
         node = cats.get(cat)
