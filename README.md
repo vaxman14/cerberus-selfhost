@@ -14,6 +14,8 @@ Results and history stay in a local SQLite database inside a Docker volume.
 There is no required cloud account, hosted database, analytics service, or
 external login provider.
 
+Website, installation guide, and policies: <https://cerberusscan.com>
+
 ## Quick start
 
 Requirements: Docker Engine with Docker Compose v2.
@@ -105,6 +107,16 @@ Cerberus is free software. If it saves you time, you can
 [buy me a coffee](https://buymeacoffee.com/romanvaxman). Contributions do not
 purchase support, features, or an SLA.
 
+## Documentation and policies
+
+- [Help and operations guide](docs/HELP.md)
+- [Privacy](PRIVACY.md)
+- [Terms of use](TERMS.md)
+- [Security and authorization disclaimer](DISCLAIMER.md)
+- [Security policy](SECURITY.md)
+
 ## License
 
-GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+Copyright 2026 CTF Designs. Licensed under the GNU Affero General Public
+License v3.0. See the complete [LICENSE](LICENSE). The Cerberus and CTF
+Designs names and logos are not licensed for misleading endorsement.
