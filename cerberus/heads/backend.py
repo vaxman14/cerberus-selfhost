@@ -102,6 +102,9 @@ def _zap(url: str, cancel_event=None) -> list[Finding]:
     except Exception as exc:
         raise RuntimeError(f"ZAP daemon not reachable at {base}") from exc
     try:
+        # ZAP is a long-running sidecar. Its alert store survives between scans,
+        # so clear it before this run or fixed issues reappear as stale findings.
+        api("core/action/deleteAllAlerts")
         # Force the URL into ZAP's site tree first, else ascan-by-url 400s with
         # "URL Not Found in the Scan Tree".
         api("core/action/accessUrl", url=url)
@@ -128,9 +131,31 @@ def _zap(url: str, cancel_event=None) -> list[Finding]:
         raise
     except Exception as e:
         raise RuntimeError(f"ZAP active scan did not complete: {str(e)[:160]}") from e
-    return [Finding(Head.BACKEND, f"ZAP: {a.get('alert', '')}", _map_sev(a.get("risk", "")),
-                    (a.get("description", "") or "")[:400], evidence=str(a.get("url", ""))[:120],
-                    remediation=(a.get("solution", "") or "")[:300]) for a in alerts]
+    grouped: dict[tuple[str, str, str, str], dict] = {}
+    for alert in alerts:
+        key = (
+            str(alert.get("alert", "")), str(alert.get("risk", "")),
+            str(alert.get("description", "")), str(alert.get("solution", "")),
+        )
+        bucket = grouped.setdefault(key, {"alert": alert, "urls": []})
+        affected = str(alert.get("url", ""))
+        if affected and affected not in bucket["urls"]:
+            bucket["urls"].append(affected)
+
+    findings: list[Finding] = []
+    for bucket in grouped.values():
+        alert = bucket["alert"]
+        urls = bucket["urls"]
+        evidence = urls[0][:120] if urls else ""
+        if len(urls) > 1:
+            evidence = f"{evidence} (+{len(urls) - 1} more URL{'s' if len(urls) != 2 else ''})"
+        findings.append(Finding(
+            Head.BACKEND, f"ZAP: {alert.get('alert', '')}",
+            _map_sev(alert.get("risk", "")),
+            (alert.get("description", "") or "")[:400], evidence=evidence,
+            remediation=(alert.get("solution", "") or "")[:300],
+        ))
+    return findings
 
 
 def _sqlmap(url: str, run_id: str = "") -> list[Finding]:

@@ -10,7 +10,7 @@ from unittest.mock import patch
 from cerberus import llm, local_auth, persistence, reporting, runner, tools_api, vault
 from cerberus.cancellation import ScanCancelled
 from cerberus.auth_gate import AuthorizationError, AuthorizationGate
-from cerberus.heads import backend
+from cerberus.heads import backend, nose
 from cerberus.models import AuthRecord, Finding, Head, ScanResult, Severity
 
 
@@ -110,6 +110,48 @@ class ActiveToolResultTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "did not complete"):
                 backend._nuclei("https://example.com")
+
+    def test_zap_duplicate_alerts_are_collapsed_with_affected_url_count(self):
+        alerts = [
+            {
+                "alert": "CSP warning", "risk": "Medium", "description": "same",
+                "solution": "fix it", "url": "https://example.com/one",
+            },
+            {
+                "alert": "CSP warning", "risk": "Medium", "description": "same",
+                "solution": "fix it", "url": "https://example.com/two",
+            },
+        ]
+
+        payloads = iter([
+            {"version": "test"}, {}, {}, {"scan": "1"}, {"status": "100"},
+            {"scan": "2"}, {"status": "100"}, {"alerts": alerts},
+        ])
+        with patch("urllib.request.urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.read.side_effect = (
+                lambda: __import__("json").dumps(next(payloads)).encode())
+            findings = backend._zap("https://example.com")
+        self.assertEqual(len(findings), 1)
+        self.assertIn("+1 more URL", findings[0].evidence)
+
+
+class PassiveMailPolicyTests(unittest.TestCase):
+    def test_mail_policy_uses_registrable_domain_for_subdomain_target(self):
+        self.assertEqual(nose._mail_domain("ce.heyjosi.com"), "heyjosi.com")
+        self.assertEqual(nose._mail_domain("app.example.co.uk"), "example.co.uk")
+
+    def test_spf_and_dmarc_queries_use_registrable_domain(self):
+        with patch.object(nose, "_doh_txt", side_effect=[
+            ["v=spf1 include:example.test ~all"], ["v=DMARC1; p=none"],
+        ]) as lookup:
+            findings = []
+            nose._spf("ce.heyjosi.com", findings)
+            nose._dmarc("ce.heyjosi.com", findings)
+        self.assertEqual(findings, [])
+        self.assertEqual(
+            [call.args[0] for call in lookup.call_args_list],
+            ["heyjosi.com", "_dmarc.heyjosi.com"],
+        )
 
 
 class ReportSupportLinkTests(unittest.TestCase):

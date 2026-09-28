@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 import requests
+import tldextract
 from urllib.parse import urlparse
 from ..models import Finding, Severity, Head
 from ..governor import SafetyGovernor
@@ -17,6 +18,8 @@ _OLD_HINTS = [
     (r"openssl/1\.0", "OpenSSL 1.0.x (end-of-life)"),
     (r"iis/[1-7]\.", "an old IIS (<8)"),
 ]
+
+_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
 
 
 def _base(url: str) -> str:
@@ -80,23 +83,31 @@ def _doh_txt(name):
         return None
 
 
+def _mail_domain(host: str) -> str:
+    """Return the registrable domain where organizational mail policy lives."""
+    extracted = _TLD_EXTRACT(host)
+    return extracted.top_domain_under_public_suffix or host
+
+
 def _spf(host, out):
     if not host or host.replace(".", "").isdigit():
         return
-    spf = _doh_txt(host)
+    domain = _mail_domain(host)
+    spf = _doh_txt(domain)
     if spf is not None and not any(t.lower().startswith("v=spf1") for t in spf):
         out.append(Finding(Head.NOSE, "No SPF record", Severity.MEDIUM,
-                           f"{host} has no SPF record. Anyone can forge email from this domain.",
+                           f"{domain} has no SPF record. Anyone can forge email from this domain.",
                            remediation="Publish an SPF TXT record (e.g. v=spf1 include:... -all)."))
 
 
 def _dmarc(host, out):
     if not host or host.replace(".", "").isdigit():
         return
-    dmarc = _doh_txt("_dmarc." + host)
+    domain = _mail_domain(host)
+    dmarc = _doh_txt("_dmarc." + domain)
     if dmarc is not None and not any(t.lower().startswith("v=dmarc1") for t in dmarc):
         out.append(Finding(Head.NOSE, "No DMARC record", Severity.MEDIUM,
-                           f"{host} has no DMARC policy. Spoofed email won't be rejected or reported.",
+                           f"{domain} has no DMARC policy. Spoofed email won't be rejected or reported.",
                            remediation="Publish a _dmarc TXT record (start with p=none, then tighten to quarantine/reject)."))
 
 
