@@ -1,0 +1,87 @@
+name: Windows desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "feat/windows-desktop-*"
+    paths:
+      - "cerberus/**"
+      - "console/**"
+      - "desktop/windows/**"
+      - "requirements.txt"
+      - ".github/workflows/windows-desktop.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      CERBERUS_VERSION: "0.2.2"
+      CERBERUS_STAGE_DIR: D:\a\cerberus-stage
+      CERBERUS_INSTALLER_DIR: D:\a\cerberus-installer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.6"
+          cache: false
+      - name: Build complete native runtime
+        shell: pwsh
+        run: >-
+          ./desktop/windows/build-runtime.ps1
+          -BuildRoot D:\a\cerberus-build
+          -StageRoot $env:CERBERUS_STAGE_DIR
+      - name: Verify packaged runtime inventory
+        shell: pwsh
+        run: |
+          $required = @(
+            'Cerberus.exe',
+            'runtime\cerberus-api\cerberus-api.exe',
+            'runtime\cerberus-tools\cerberus-tools.exe',
+            'runtime\cerberus-userctl\cerberus-userctl.exe',
+            'runtime\cerberus-backupctl\cerberus-backupctl.exe',
+            'runtime\tools\nuclei.exe',
+            'runtime\tools\python\python.exe',
+            'runtime\tools\node\node.exe',
+            'runtime\tools\jre\bin\java.exe',
+            'runtime\tools\zap\zap-2.17.0.jar',
+            'runtime\tools\sqlmap\sqlmap.py',
+            'runtime\tools\node-packages\node_modules\lighthouse\cli\index.js',
+            'runtime\tools\node-packages\node_modules\.bin\codex.cmd'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path (Join-Path $env:CERBERUS_STAGE_DIR $path))) {
+              throw "Missing packaged runtime file: $path"
+            }
+          }
+      - name: Smoke-test complete packaged runtime
+        shell: pwsh
+        run: ./desktop/windows/smoke-test.ps1 -StageRoot $env:CERBERUS_STAGE_DIR
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:CERBERUS_INSTALLER_DIR | Out-Null
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' desktop\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          $installer = Get-ChildItem $env:CERBERUS_INSTALLER_DIR -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer was not produced' }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Cerberus-Windows-${{ env.CERBERUS_VERSION }}-unsigned
+          path: D:\a\cerberus-installer\*
+          if-no-files-found: error
+          retention-days: 14

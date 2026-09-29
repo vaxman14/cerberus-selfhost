@@ -168,7 +168,7 @@ _LOGIN: dict[str, dict] = {}
 def subscription_status(provider: str) -> dict:
     if provider != "openai_subscription":
         raise LLMError("choose the ChatGPT subscription provider")
-    command = "codex"
+    command = os.environ.get("CERBERUS_CODEX_BIN", "codex")
     if not shutil.which(command):
         return {"installed": False, "signed_in": False, "detail": f"{command} is not installed."}
     args = [command, "login", "status"]
@@ -223,7 +223,7 @@ def start_subscription_login(provider: str) -> dict:
         current = _LOGIN.get(provider)
         if current and current.get("process") and current["process"].poll() is None:
             return {key: current.get(key) for key in ("state", "url", "code", "message")}
-        command = ["codex", "login", "--device-auth"]
+        command = [os.environ.get("CERBERUS_CODEX_BIN", "codex"), "login", "--device-auth"]
         try:
             process = subprocess.Popen(
                 command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -620,13 +620,15 @@ def _cohere_chat(profile: dict, key: str, body: dict, *, stream: bool) -> reques
 def _subscription_env(provider: str) -> dict:
     if provider != "openai_subscription":
         raise LLMError("unsupported subscription provider")
-    config_dir = "/data/codex"
+    data_dir = os.environ.get("CERBERUS_DATA_DIR", "/data")
+    config_dir = os.environ.get("CERBERUS_CODEX_HOME", os.path.join(data_dir, "codex"))
     os.makedirs(config_dir, mode=0o700, exist_ok=True)
     os.chmod(config_dir, 0o700)
-    env = {
+    env = os.environ.copy()
+    env.update({
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-        "HOME": "/data", "NO_COLOR": "1", "CI": "1",
-    }
+        "HOME": data_dir, "NO_COLOR": "1", "CI": "1",
+    })
     env["CODEX_HOME"] = config_dir
     return env
 
@@ -676,7 +678,8 @@ def _subscription_chat(profile: dict, body: dict, *, stream: bool) -> requests.R
     if provider != "openai_subscription":
         raise LLMError("unsupported subscription provider")
     model = "" if profile.get("model") == "plan-default" else str(profile.get("model") or "")
-    command = ["codex", "exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"]
+    command = [os.environ.get("CERBERUS_CODEX_BIN", "codex"), "exec", "--json",
+               "--sandbox", "read-only", "--skip-git-repo-check"]
     if model:
         command += ["--model", model]
     command.append("-")
