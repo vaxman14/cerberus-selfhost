@@ -121,7 +121,8 @@ Copy-Item (Join-Path $PSScriptRoot "THIRD_PARTY_NOTICES.md") $Licenses
 Copy-Item (Join-Path $Tools "python/LICENSE.txt") (Join-Path $Licenses "Python-LICENSE.txt")
 Copy-Item (Join-Path $Tools "node/LICENSE") (Join-Path $Licenses "Node-LICENSE.txt")
 Copy-Item (Join-Path $Tools "node-packages/node_modules/lighthouse/LICENSE") (Join-Path $Licenses "Lighthouse-LICENSE.txt")
-Copy-Item (Join-Path $Tools "node-packages/node_modules/@openai/codex/LICENSE") (Join-Path $Licenses "Codex-LICENSE.txt")
+$CodexLicense = Get-VerifiedFile $Lock.codex.licenseUrl $Lock.codex.licenseSha256 "Codex-LICENSE.txt"
+Copy-Item $CodexLicense (Join-Path $Licenses "Codex-LICENSE.txt")
 Copy-Item (Join-Path $NucleiSource "LICENSE.md") (Join-Path $Licenses "Nuclei-LICENSE.txt")
 Copy-Item (Join-Path $Tools "nuclei-templates/LICENSE.md") (Join-Path $Licenses "Nuclei-Templates-LICENSE.txt")
 Copy-Item (Join-Path $Tools "sqlmap/LICENSE") (Join-Path $Licenses "sqlmap-LICENSE.txt")
