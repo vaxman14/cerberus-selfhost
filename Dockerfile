@@ -6,7 +6,7 @@ RUN npm install -g --ignore-scripts "@openai/codex@${CERBERUS_CODEX_VERSION}" \
 
 FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
 
-ARG CERBERUS_VERSION=0.2.1
+ARG CERBERUS_VERSION=0.2.2
 ARG CERBERUS_REVISION=unknown
 ARG CERBERUS_CREATED=unknown
 

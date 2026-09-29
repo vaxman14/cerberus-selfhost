@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Container version="2">
   <Name>Cerberus-AIO</Name>
-  <Repository>romanvaxman/cerberus-aio:0.2.1</Repository>
+  <Repository>romanvaxman/cerberus-aio:0.2.2</Repository>
   <Registry>https://hub.docker.com/r/romanvaxman/cerberus-aio</Registry>
   <Network>bridge</Network>
   <Shell>sh</Shell>
@@ -16,7 +16,7 @@
   <Category>Tools:System Security:</Category>
   <ExtraSearchTerms>website scanner lighthouse nuclei zap sqlmap security pentest</ExtraSearchTerms>
   <Requires>Docker socket access; approximately 8 GB free disk and 8 GB RAM recommended. Active scans are disabled by default.</Requires>
-  <Changes>0.2.1: New Cerberus Scan branding, clearer AIO onboarding, and corrected first-owner form layout.</Changes>
+  <Changes>0.2.2: Searchable test manual, clearer password recovery and active-scan guidance, combined model save/probe, collapsible model settings, and logo-matched console background.</Changes>
   <Date>2026-09-28</Date>
   <MinVer>7.0</MinVer>
   <License>AGPL-3.0-only</License>

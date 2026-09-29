@@ -1,6 +1,6 @@
 # Privacy
 
-Effective September 27, 2026.
+Effective September 28, 2026.
 
 Cerberus is self-hosted. The standard app does not send analytics, telemetry,
 API keys, or scan history to CTF Designs. Target URLs, findings, and timestamps
@@ -19,5 +19,9 @@ data volume. Provider credentials are encrypted with an installation key kept
 outside the database. When an operator uses a remote LLM, the target and scanner
 findings are sent to that provider and its privacy policy applies. A local model
 can avoid that transmission. CTF Designs does not receive those accounts.
+
+The searchable test manual runs in the browser from content shipped with the
+app. Searches are not sent to CTF Designs. The manual provides general
+descriptions of checks and results, not personalized advice or remediation.
 
 The complete current policy is at <https://cerberusscan.com/privacy.html>.

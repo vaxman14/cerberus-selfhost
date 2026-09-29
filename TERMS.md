@@ -1,6 +1,6 @@
 # Terms of Use
 
-Effective September 27, 2026.
+Effective September 28, 2026.
 
 Use Cerberus only against systems you own or are explicitly authorized to
 assess. You are responsible for authorization, deployment security, target
@@ -12,6 +12,11 @@ findings.
 
 Cerberus is an automated diagnostic. Results can be incomplete or inaccurate
 and are not a guarantee of security, compliance, or fitness for any purpose.
+Test descriptions explain what automated checks observe and why those signals
+may matter. They do not prescribe remediation, recommend a course of action,
+or constitute legal, compliance, insurance, engineering, or professional
+security advice. You are responsible for independently validating findings and
+deciding whether and how to act.
 The software, reports, and documentation are provided as is, without a support
 contract, maintenance promise, or SLA.
 

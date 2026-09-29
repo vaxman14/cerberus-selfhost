@@ -11,5 +11,8 @@ rate, timing, monitoring, backups, and compliance with applicable law and
 third-party terms.
 
 Cerberus is provided as is, without professional advice, warranty, managed
-hosting, remediation, support, or an SLA. See
+hosting, remediation, support, or an SLA. Test descriptions explain automated
+observations but do not prescribe remediation or recommend a course of action.
+Operators must independently validate findings and decide whether and how to
+act. See
 <https://cerberusscan.com/disclaimer.html> and [TERMS.md](TERMS.md).

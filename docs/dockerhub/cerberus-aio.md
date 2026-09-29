@@ -29,7 +29,7 @@ docker run -d \
   -v cerberus-aio-config:/config \
   -e CERBERUS_AIO_CONFIG_VOLUME=cerberus-aio-config \
   -e CERBERUS_ENABLE_ACTIVE_SCANS=false \
-  romanvaxman/cerberus-aio:0.2.1
+  romanvaxman/cerberus-aio:0.2.2
 ```
 
 ### What every line does
@@ -57,7 +57,7 @@ docker run -d \
 - `-e CERBERUS_ENABLE_ACTIVE_SCANS=false` keeps Nuclei, ZAP, and sqlmap scans
   disabled. Passive checks still work; enable active scans only when you
   understand their impact and have authorization for every target.
-- `romanvaxman/cerberus-aio:0.2.1` is the exact launcher image and immutable
+- `romanvaxman/cerberus-aio:0.2.2` is the exact launcher image and immutable
   release tag Docker runs. Pinning the version avoids an unexpected launcher
   upgrade.
 
@@ -121,7 +121,7 @@ you own or are authorized to assess.
 - [Help and operations](https://cerberusscan.com/help)
 - [Source and complete documentation](https://github.com/vaxman14/cerberus-selfhost)
 - [AIO security and operations notes](https://github.com/vaxman14/cerberus-selfhost/blob/main/docs/UNRAID.md)
-- [Release v0.2.1](https://github.com/vaxman14/cerberus-selfhost/releases/tag/v0.2.1)
+- [Release v0.2.2](https://github.com/vaxman14/cerberus-selfhost/releases/tag/v0.2.2)
 - [Security policy](https://github.com/vaxman14/cerberus-selfhost/blob/main/SECURITY.md)
 - [AGPL-3.0 license](https://github.com/vaxman14/cerberus-selfhost/blob/main/LICENSE)
 

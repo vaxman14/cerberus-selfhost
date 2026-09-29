@@ -23,7 +23,7 @@ services:
         install -g 4242 -m 0440 /source/cerberus_zap_api_key /target/zap_api_key
 
   cerberus:
-    image: ${CERBERUS_IMAGE:-romanvaxman/cerberus-selfhost:0.2.1}
+    image: ${CERBERUS_IMAGE:-romanvaxman/cerberus-selfhost:0.2.2}
     restart: unless-stopped
     init: true
     read_only: true
@@ -54,7 +54,7 @@ services:
       zap: {condition: service_healthy}
 
   cerberus-tools:
-    image: ${CERBERUS_TOOLS_IMAGE:-romanvaxman/cerberus-tools:0.2.1}
+    image: ${CERBERUS_TOOLS_IMAGE:-romanvaxman/cerberus-tools:0.2.2}
     restart: unless-stopped
     init: true
     read_only: true
@@ -71,7 +71,7 @@ services:
       secret-init: {condition: service_completed_successfully}
 
   zap:
-    image: ${CERBERUS_ZAP_IMAGE:-romanvaxman/cerberus-zap:0.2.1}
+    image: ${CERBERUS_ZAP_IMAGE:-romanvaxman/cerberus-zap:0.2.2}
     restart: unless-stopped
     init: true
     read_only: true

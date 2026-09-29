@@ -78,7 +78,7 @@ docker run -d \
   -v cerberus-aio-config:/config \
   -e CERBERUS_AIO_CONFIG_VOLUME=cerberus-aio-config \
   -e CERBERUS_ENABLE_ACTIVE_SCANS=false \
-  romanvaxman/cerberus-aio:0.2.1
+  romanvaxman/cerberus-aio:0.2.2
 ```
 
 ### What every AIO line does
@@ -104,7 +104,7 @@ docker run -d \
   volume name.
 - `-e CERBERUS_ENABLE_ACTIVE_SCANS=false` keeps Nuclei, ZAP, and sqlmap disabled
   while leaving passive checks available.
-- `romanvaxman/cerberus-aio:0.2.1` selects the exact immutable AIO release image
+- `romanvaxman/cerberus-aio:0.2.2` selects the exact immutable AIO release image
   instead of accepting an unexpected launcher upgrade.
 
 The AIO command publishes port `8099` on the Docker host. Do not expose or

@@ -228,6 +228,9 @@ class ConsoleBrandAndLayoutTests(unittest.TestCase):
         self.assertIn('id="helpSearch"', console)
         self.assertIn("name:'DMARC email policy'", console)
         self.assertIn("name:'OWASP ZAP spider and active scan'", console)
+        self.assertNotIn('How to fix it:', console)
+        self.assertNotIn("fix:'", console)
+        self.assertIn('does not prescribe remediation or professional advice', console)
         for path, (asset, content_type) in api.CONSOLE_ASSETS.items():
             self.assertTrue(asset.is_file(), path)
             self.assertGreater(asset.stat().st_size, 0, path)

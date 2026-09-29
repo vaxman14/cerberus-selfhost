@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        CERBERUS_VERSION: 0.2.1-dev
+        CERBERUS_VERSION: 0.2.2-dev
     image: cerberus-selfhost:dev
 
   cerberus-tools:
@@ -11,7 +11,7 @@ services:
       context: .
       dockerfile: Dockerfile.tools
       args:
-        CERBERUS_VERSION: 0.2.1-dev
+        CERBERUS_VERSION: 0.2.2-dev
     image: cerberus-tools:dev
 
   zap:
@@ -19,5 +19,5 @@ services:
       context: .
       dockerfile: Dockerfile.zap
       args:
-        CERBERUS_VERSION: 0.2.1-dev
+        CERBERUS_VERSION: 0.2.2-dev
     image: cerberus-zap:dev

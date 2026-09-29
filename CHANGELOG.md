@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 - 2026-09-28
+
+- Match the console background to the Cerberus logo.
+- Add password visibility and copyable local password-reset commands.
+- Combine model saving and capability validation into one action.
+- Explain disabled active-scanning capability instead of hiding it silently.
+- Add a searchable, descriptive manual for all scanner checks without
+  remediation recommendations.
+- Collapse model-provider controls until the operator needs them.
+- Clarify the Terms and Privacy Policy for descriptive test documentation.
+
 ## 0.2.1 - 2026-09-28
 
 - Added the new Cerberus Scan logo across the application, website, registry
