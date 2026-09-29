@@ -82,6 +82,12 @@ $VenvPython = Join-Path $Venv "Scripts/python.exe"
 Write-Host "Installing pinned Python, Node, Java, and ZAP runtimes"
 $PythonArchive = Get-VerifiedFile $Lock.python.url $Lock.python.sha256 "python-embed.zip"
 Expand-FlatZip $PythonArchive (Join-Path $Tools "python")
+# The embeddable runtime intentionally omits the script directory from sys.path.
+# Add only the pinned sqlmap source tree; do not enable ambient site-packages.
+$PythonPathFile = Get-ChildItem (Join-Path $Tools "python") -Filter "python*._pth" |
+    Select-Object -First 1
+if (-not $PythonPathFile) { throw "Embedded Python path configuration was not found" }
+Add-Content $PythonPathFile.FullName "..\sqlmap"
 $NodeArchive = Get-VerifiedFile $Lock.node.url $Lock.node.sha256 "node.zip"
 Expand-FlatZip $NodeArchive (Join-Path $Tools "node")
 $JavaArchive = Get-VerifiedFile $Lock.java.url $Lock.java.sha256 "jre.zip"
