@@ -1,0 +1,10 @@
+{
+  "name": "cerberus-windows-node-runtime",
+  "version": "0.2.2",
+  "private": true,
+  "description": "Pinned Node sidecars for the Cerberus Windows distribution",
+  "dependencies": {
+    "@openai/codex": "0.152.0",
+    "lighthouse": "13.5.0"
+  }
+}

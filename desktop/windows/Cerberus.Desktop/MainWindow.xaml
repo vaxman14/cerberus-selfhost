@@ -1,0 +1,36 @@
+<Window x:Class="Cerberus.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Cerberus" Width="1220" Height="820" MinWidth="900" MinHeight="640"
+        Background="#0A0C10" WindowStartupLocation="CenterScreen">
+  <DockPanel>
+    <Menu DockPanel.Dock="Top" Background="#151922" Foreground="#E7E9ED">
+      <MenuItem Header="_File">
+        <MenuItem Header="_Back up data…" Click="Backup_Click" />
+        <MenuItem Header="Open _data folder" Click="OpenDataFolder_Click" />
+        <Separator />
+        <MenuItem Header="E_xit" Click="Exit_Click" />
+      </MenuItem>
+      <MenuItem Header="_Account">
+        <MenuItem Header="Reset owner _password…" Click="ResetPassword_Click" />
+      </MenuItem>
+    </Menu>
+    <Grid>
+      <wv2:WebView2 x:Name="Browser" Visibility="Collapsed" />
+    <Border x:Name="LoadingPanel" Background="#0A0C10">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="560">
+        <TextBlock Text="CERBERUS" Foreground="#E8B44F" FontSize="38" FontWeight="Bold"
+                   HorizontalAlignment="Center" />
+        <TextBlock x:Name="StatusText" Text="Starting isolated scanner services…"
+                   Foreground="#D6DAE0" FontSize="16" Margin="0,22,0,0"
+                   TextAlignment="Center" TextWrapping="Wrap" />
+        <ProgressBar x:Name="Progress" Height="5" Margin="0,22,0,0" IsIndeterminate="True"
+                     Foreground="#E8B44F" Background="#252A33" />
+        <Button x:Name="OpenLogsButton" Content="Open logs" Visibility="Collapsed"
+                Width="120" Margin="0,24,0,0" Click="OpenLogsButton_Click" />
+      </StackPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

@@ -7,6 +7,7 @@ import re
 import signal
 import socket
 import subprocess
+import tempfile
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,12 +46,22 @@ def _validate_url(value: object) -> str:
 
 
 def _run(command: list[str], *, timeout: int, run_id: str = "") -> subprocess.CompletedProcess:
+    environment = os.environ.copy()
+    environment.update({
+        "HOME": os.environ.get("CERBERUS_TOOL_HOME", tempfile.gettempdir()),
+        "NO_COLOR": "1",
+        "CHROME_PATH": os.environ.get("CERBERUS_CHROME_PATH", "/usr/bin/chromium"),
+    })
+    process_options = {}
+    if os.name == "nt":
+        process_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        process_options["start_new_session"] = True
     with RUN_LOCK:
         process = subprocess.Popen(
             command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            start_new_session=True,
-            env={"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-                 "HOME": "/tmp", "NO_COLOR": "1", "CHROME_PATH": "/usr/bin/chromium"},
+            env=environment,
+            **process_options,
         )
         if run_id:
             with RUNNING_LOCK:
@@ -72,6 +83,16 @@ def _terminate(process: subprocess.Popen) -> None:
     if process.poll() is not None:
         _terminate_lighthouse_children()
         return
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False, capture_output=True, timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            process.kill()
+        _terminate_lighthouse_children()
+        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
         process.wait(timeout=3)
@@ -86,6 +107,8 @@ def _terminate(process: subprocess.Popen) -> None:
 
 def _terminate_lighthouse_children() -> None:
     """Lighthouse may detach Chromium from the Node process group; reap it."""
+    if os.name == "nt" or not Path("/proc").is_dir():
+        return
     for proc in Path("/proc").iterdir():
         if not proc.name.isdigit():
             continue
@@ -107,8 +130,13 @@ def cancel(run_id: str) -> bool:
 
 
 def lighthouse(url: str, run_id: str = "") -> dict:
-    result = _run([
-        "lighthouse", url, "--quiet", "--output=json", "--output-path=stdout",
+    lighthouse_bin = os.environ.get("CERBERUS_LIGHTHOUSE_BIN", "lighthouse")
+    lighthouse_script = os.environ.get("CERBERUS_LIGHTHOUSE_SCRIPT", "").strip()
+    command = [lighthouse_bin]
+    if lighthouse_script:
+        command.append(lighthouse_script)
+    result = _run(command + [
+        url, "--quiet", "--output=json", "--output-path=stdout",
         "--only-categories=performance,best-practices",
         "--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu",
     ], timeout=180, run_id=run_id)
@@ -126,9 +154,11 @@ def lighthouse(url: str, run_id: str = "") -> dict:
 
 
 def nuclei(url: str, run_id: str = "") -> dict:
+    nuclei_bin = os.environ.get("CERBERUS_NUCLEI_BIN", "nuclei")
+    templates = os.environ.get("CERBERUS_NUCLEI_TEMPLATES", "/opt/nuclei-templates")
     result = _run([
-        "nuclei", "-u", url, "-jsonl", "-silent", "-duc", "-ni",
-        "-t", "/opt/nuclei-templates", "-severity", "low,medium,high,critical",
+        nuclei_bin, "-u", url, "-jsonl", "-silent", "-duc", "-ni",
+        "-t", templates, "-severity", "low,medium,high,critical",
         "-tags", "misconfig,exposure,cve,default-login,tech",
         "-timeout", "5", "-retries", "1", "-rl", "75", "-c", "15",
     ], timeout=660, run_id=run_id)
@@ -150,10 +180,15 @@ def nuclei(url: str, run_id: str = "") -> dict:
 
 
 def sqlmap(url: str, run_id: str = "") -> dict:
+    python_bin = os.environ.get("CERBERUS_PYTHON_BIN", "python3")
+    sqlmap_path = os.environ.get("CERBERUS_SQLMAP_PATH", "/opt/sqlmap/sqlmap.py")
+    output_dir = os.environ.get(
+        "CERBERUS_SQLMAP_OUTPUT_DIR", str(Path(tempfile.gettempdir()) / "cerberus-sqlmap")
+    )
     result = _run([
-        "python3", "/opt/sqlmap/sqlmap.py", "-u", url, "--batch", "--smart",
+        python_bin, sqlmap_path, "-u", url, "--batch", "--smart",
         "--level=1", "--risk=1", "--technique=BEUS", "--flush-session",
-        "--disable-coloring", "--output-dir=/tmp/sqlmap-output",
+        "--disable-coloring", f"--output-dir={output_dir}",
     ], timeout=900, run_id=run_id)
     output = f"{result.stdout}\n{result.stderr}"
     negative = bool(re.search(
@@ -226,7 +261,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     _token()
-    ThreadingHTTPServer(("0.0.0.0", 8181), Handler).serve_forever()
+    host = os.environ.get("CERBERUS_TOOLS_HOST", "0.0.0.0")
+    port = int(os.environ.get("CERBERUS_TOOLS_PORT", "8181"))
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
 
 
 if __name__ == "__main__":

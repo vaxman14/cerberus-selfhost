@@ -6,6 +6,7 @@ import threading
 import hmac
 import time
 import urllib.request
+import sys
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -19,14 +20,16 @@ SUPA_ANON = os.environ.get("SUPABASE_ANON_KEY", "")
 AUTH_MODE = os.environ.get(
     "CERBERUS_AUTH_MODE", "supabase" if SUPA_ANON else "apikey").lower()
 ADMIN_EMAIL = os.environ.get("CERBERUS_ADMIN_EMAIL", "").lower()
-CONSOLE_PATH = Path(__file__).resolve().parent.parent / "console" / "index.html"
+_BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+CONSOLE_DIR = Path(os.environ.get("CERBERUS_CONSOLE_DIR", _BUNDLE_ROOT / "console"))
+CONSOLE_PATH = CONSOLE_DIR / "index.html"
 CONSOLE_ASSETS = {
     "/cerberus-logo.jpg": (
-        Path(__file__).resolve().parent.parent / "console" / "cerberus-logo.jpg",
+        CONSOLE_DIR / "cerberus-logo.jpg",
         "image/jpeg",
     ),
     "/cerberus-emblem.png": (
-        Path(__file__).resolve().parent.parent / "console" / "cerberus-emblem.png",
+        CONSOLE_DIR / "cerberus-emblem.png",
         "image/png",
     ),
 }
@@ -235,7 +238,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/auth/status":
             user = self._user()
             payload = {"setup_required": local_auth.setup_required(),
-                       "authenticated": bool(user)}
+                       "authenticated": bool(user),
+                       "desktop": os.environ.get("CERBERUS_DESKTOP", "").lower()
+                       in ("1", "true", "yes")}
             if user:
                 payload["user"] = {"username": user["username"], "role": user["role"]}
                 if not user.get("api_key") and not user.get("supabase"):

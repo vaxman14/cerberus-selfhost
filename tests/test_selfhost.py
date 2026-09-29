@@ -119,6 +119,40 @@ class ActiveScanGateTests(unittest.TestCase):
 
 
 class ActiveToolResultTests(unittest.TestCase):
+    def test_desktop_tool_paths_are_configurable(self):
+        completed = unittest.mock.MagicMock(
+            returncode=0,
+            stdout='{"categories":{"performance":{"score":1},"best-practices":{"score":1}}}',
+            stderr="",
+        )
+        env = {
+            "CERBERUS_LIGHTHOUSE_BIN": r"C:\\Cerberus\\node.exe",
+            "CERBERUS_LIGHTHOUSE_SCRIPT": r"C:\\Cerberus\\lighthouse\\cli\\index.js",
+            "CERBERUS_CHROME_PATH": r"C:\\Program Files\\Microsoft\\Edge\\msedge.exe",
+        }
+        with patch.dict(os.environ, env, clear=False), patch.object(
+            tools_api, "_run", return_value=completed
+        ) as run:
+            tools_api.lighthouse("https://example.com")
+        command = run.call_args.args[0]
+        self.assertEqual(command[:2], [env["CERBERUS_LIGHTHOUSE_BIN"],
+                                       env["CERBERUS_LIGHTHOUSE_SCRIPT"]])
+
+    def test_desktop_sqlmap_paths_are_configurable(self):
+        completed = unittest.mock.MagicMock(returncode=0, stdout="not injectable", stderr="")
+        env = {
+            "CERBERUS_PYTHON_BIN": r"C:\\Cerberus\\python.exe",
+            "CERBERUS_SQLMAP_PATH": r"C:\\Cerberus\\sqlmap.py",
+            "CERBERUS_SQLMAP_OUTPUT_DIR": r"C:\\Cerberus\\data\\sqlmap",
+        }
+        with patch.dict(os.environ, env, clear=False), patch.object(
+            tools_api, "_run", return_value=completed
+        ) as run:
+            tools_api.sqlmap("https://example.com")
+        command = run.call_args.args[0]
+        self.assertEqual(command[:2], [env["CERBERUS_PYTHON_BIN"], env["CERBERUS_SQLMAP_PATH"]])
+        self.assertIn(f"--output-dir={env['CERBERUS_SQLMAP_OUTPUT_DIR']}", command)
+
     def test_sqlmap_negative_sentence_is_not_a_vulnerability(self):
         completed = unittest.mock.MagicMock(
             returncode=0,

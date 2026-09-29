@@ -11,6 +11,8 @@ node_modules/
 .DS_Store
 dist/
 build/
+bin/
+obj/
 .next/
 .cache/
 *.pem

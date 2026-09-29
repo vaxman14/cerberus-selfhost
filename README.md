@@ -4,7 +4,7 @@
 
 Cerberus is a free, self-hosted website security and quality scanner. Local
 users, scan history, reports, and encrypted model credentials stay on your
-Docker host.
+Cerberus installation.
 
 - **The Surface** — HTTPS, headers, cookies, exposed files, source maps, and
   common client-side secret patterns.
@@ -16,6 +16,18 @@ Docker host.
 Cerberus includes local owner authentication, per-site run history, stoppable
 jobs, PDF-ready client reports, and optional AI analysis through API providers
 or a ChatGPT plan using OpenAI's official Codex CLI.
+
+## Windows desktop edition
+
+The Windows desktop build provides the complete Cerberus stack without Docker:
+the local console and history, passive checks, Lighthouse, Nuclei, OWASP ZAP,
+sqlmap, AI Lab, encrypted provider profiles, and ChatGPT-plan integration. It
+runs every service on loopback and stores application data under the current
+user's LocalAppData directory.
+
+Windows packaging source and build instructions are in
+[`desktop/windows`](desktop/windows/README.md). Development artifacts remain
+unsigned until physical-device acceptance and production signing.
 
 ## Quick start
 

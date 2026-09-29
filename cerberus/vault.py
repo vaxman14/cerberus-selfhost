@@ -65,7 +65,10 @@ def load_master_key(path: str | None = None, *, strict_permissions: bool = True)
         raw = key_path.read_text(encoding="utf-8")
     except OSError as exc:
         raise VaultError(f"no master key at {key_path}; create and mount the Docker secret") from exc
-    if strict_permissions and not str(key_path).startswith("/run/secrets/"):
+    # POSIX mode bits do not represent Windows ACLs. The desktop launcher creates
+    # this file below the current user's LocalAppData directory and applies a
+    # current-user-only ACL before starting the backend.
+    if strict_permissions and os.name != "nt" and not str(key_path).startswith("/run/secrets/"):
         mode = stat.S_IMODE(key_path.stat().st_mode)
         if mode & 0o077:
             raise VaultError(f"master key at {key_path} is readable by other users; chmod 600 it")
@@ -110,4 +113,3 @@ def looks_sealed(value: object) -> bool:
     return isinstance(value, str) and bool(
         re.fullmatch(r"v1\.[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=]+", value)
     )
-
